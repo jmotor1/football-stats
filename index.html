@@ -3,26 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1E6617">
+<meta name="theme-color" content="#61092f">
   <title>Riverview Stats — Rushing MVP</title>
   <style>
-    :root { --green:#1E6617; --muted:#6b7a70; --ink:#0e1b14; }
-    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink)}
-    header{position:sticky;top:0;background:linear-gradient(#1E6617,#155012);color:#fff;padding:12px 16px}
-    header h1{margin:0;font-size:18px}
-    main{padding:16px;display:grid;gap:16px;max-width:900px;margin:0 auto}
-    .card{border:1px solid #e6e8e6;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.04);padding:12px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1 1 140px}.row .tight{flex:0 0 auto}
-    label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
-    input,select,button{font-size:16px;padding:10px 12px;border:1px solid #cfd7d2;border-radius:8px}
-    button.primary{background:var(--green);color:#fff;border-color:transparent}
-    button.ghost{background:#fff;color:var(--green);border:1px solid var(--green)}
-    button.warn{background:#8b0000;color:#fff;border-color:transparent}
-    table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #efefef;text-align:right}
-    th:first-child,td:first-child{text-align:left} .pill{display:inline-block;background:#edf5ef;color:var(--green);padding:4px 8px;border-radius:999px;font-size:12px}
-    .flex{display:flex;gap:8px;align-items:center} .spaced{display:flex;justify-content:space-between;align-items:center}
-    .list{display:grid;gap:8px} .muted{color:var(--muted)}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px} @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+    /* Theme colors */
+:root{
+  --primary:#61092f;     /* Maroon */
+  --accent:#fddc26;      /* Gold */
+  --ink:#0e1b14;
+  --muted:#6b7a70;
+}
+
+/* Header gradient in maroon shades */
+header{
+  position:sticky; top:0;
+  background: linear-gradient(var(--primary), #4b0724);
+  color:#fff; padding:12px 16px;
+}
+
+/* Buttons & pills */
+button.primary{ background:var(--primary); color:#fff; border-color:transparent; }
+button.ghost{ background:#fff; color:var(--primary); border:1px solid var(--primary); }
+.pill{ display:inline-block; background:var(--accent); color:var(--primary);
+       padding:4px 8px; border-radius:999px; font-size:12px; }
+
   </style>
 </head>
 <body>
