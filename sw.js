@@ -1,5 +1,5 @@
 // sw.js — cache & offline
-const CACHE = 'rv-stats-v5';   // bump this on every deploy
+const CACHE = 'rv-stats-v7'; // <- new value
 const ASSETS = [
   './',                // project page root
   'index.html',
