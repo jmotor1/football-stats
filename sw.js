@@ -1,5 +1,5 @@
 // sw.js — cache & offline
-const CACHE = 'rv-stats-v7'; // <- new value
+const CACHE = 'rv-stats-v8'; // bump this value
 const ASSETS = [
   './',                // project page root
   'index.html',
