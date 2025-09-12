@@ -78,6 +78,16 @@
   <main>
     <section class="card" id="game-card">
       <div class="spaced"><h2 style="margin:6px 0 10px">Game</h2>
+        <div id="teamSwitch" class="row" style="margin:6px 0 8px">
+  <div>
+    <label>Active Team</label>
+    <div class="flex">
+      <label class="flex" style="gap:6px"><input type="radio" name="teamSel" value="home" checked> Home</label>
+      <label class="flex" style="gap:6px"><input type="radio" name="teamSel" value="away"> Away</label>
+    </div>
+  </div>
+</div>
+
         <div><button id="endGameBtn" class="ghost">End Game / Export</button>
              <button id="resetBtn" class="warn">Reset All</button></div>
       </div>
