@@ -1,0 +1,2999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#16201b">
+<title>Stat Sheet — live entry</title>
+<style>
+  :root {
+    --bg: #16201b;          /* dark slate-green, legible in a dark stand */
+    --panel: #1f2c25;
+    --panel-2: #283a31;
+    --line: #36493e;
+    --chalk: #f2f5f0;       /* primary text */
+    --dim: #8aa093;         /* secondary text */
+    --turf: #3ddc84;        /* possession + confirm accent */
+    --turf-deep: #137a44;
+    --flag: #ffd23f;        /* caution / loss */
+    --pen: #ff8a5c;         /* conflict / warning */
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--chalk);
+    font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    display: flex; justify-content: center;
+    overscroll-behavior: none;
+  }
+  #app { width: 100%; max-width: 430px; display: flex; flex-direction: column;
+         height: 100dvh; }
+
+  /* ---------- scoreboard strip ---------- */
+  .board { display: flex; align-items: center; justify-content: space-between;
+           padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .board .team { display: flex; align-items: center; gap: 7px; }
+  .board .abbr { font-weight: 700; letter-spacing: .04em; }
+  .board .pts { font-size: 20px; font-weight: 700; }
+  .board .has { color: var(--turf); }
+  .board .meta { color: var(--dim); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .menubtn { background: none; border: none; color: var(--dim); font-size: 20px; line-height: 1;
+             padding: 2px 6px; cursor: pointer; border-radius: 8px; }
+  .menubtn:active { background: var(--panel-2); }
+  .setspot { margin-top: 14px; background: var(--panel-2); border: 1px solid var(--turf-deep);
+             color: var(--turf); height: 44px; padding: 0 18px; font-size: 14px; font-weight: 600;
+             border-radius: 12px; cursor: pointer; }
+  /* slide-up menu sheet */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+              align-items: flex-end; justify-content: center; z-index: 50; }
+  .sheet { width: 100%; max-width: 430px; background: var(--panel); border-top-left-radius: 18px;
+           border-top-right-radius: 18px; padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .sheet h3 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em;
+              margin: 8px 4px 12px; font-weight: 600; }
+  .sheet button { width: 100%; height: 52px; font-size: 16px; margin-bottom: 8px; text-align: left;
+                  padding: 0 16px; }
+  .sheet .danger { color: var(--pen); border-color: var(--pen); }
+  .sheet .cancel { background: none; color: var(--dim); text-align: center; }
+  .sheet .ss-fields { display: flex; gap: 8px; margin-bottom: 10px; }
+  .sheet .ss-fields > * { flex: 1; }
+  .sheet select, .sheet .numin { height: 48px; background: var(--panel-2); color: var(--chalk);
+            border: 1px solid var(--line); border-radius: 10px; font-size: 16px; font-family: inherit;
+            text-align: center; width: 100%; padding: 0 8px; }
+  .poss-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--turf); display: inline-block; }
+  .colorbars { display: flex; height: 4px; }
+  .colorbars .cbar { flex: 1; transition: opacity .2s ease; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+
+  /* ---------- situation bar ---------- */
+  .sit { padding: 18px 16px 14px; text-align: center; border-bottom: 1px solid var(--line); }
+  .sit .dd { font-size: 30px; font-weight: 700; letter-spacing: -.01em; }
+  .sit .spot { font-size: 14px; color: var(--dim); margin-top: 3px; }
+  .sit .spot b { color: var(--chalk); font-weight: 600; }
+
+  /* ---------- body scroll area ---------- */
+  .scroll { flex: 1; overflow-y: auto; padding: 14px 16px 8px; overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch; }
+  /* phones: no double-tap zoom on fast repeated digits, no tap flash, no text-select on long press */
+  button, .val, [data-focus], [data-key], [data-chip] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .pad, .types, .chiprow, .fields { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+  /* ---------- play type buttons ---------- */
+  .types { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .types .big { height: 64px; font-size: 20px; font-weight: 700; }
+  .types .promo { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .types .promo button { height: 52px; font-size: 16px; font-weight: 700;
+      border-color: var(--flag); color: var(--flag); }
+  .types .promo button.sel { background: var(--flag); color: #2a2400; }
+  .types .row2 { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+  .types .row2 button { height: 40px; font-size: 12px; }
+  .grouplabel { display: block; font-size: 11px; color: var(--dim); margin: 10px 0 6px; }
+  .chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .chip { height: 40px; padding: 0 13px; font-size: 13px; font-weight: 600; border-radius: 10px; }
+  .confirmbox { margin-top: 12px; padding: 10px 12px 4px; border: 1px dashed var(--turf-deep);
+      border-radius: 12px; }
+  .confirmbox .grouplabel:first-child { margin-top: 0; color: var(--turf); }
+  /* play log */
+  .loghead { padding: 10px 16px 6px; font-size: 12px; color: var(--dim);
+             background: var(--panel); border-top: 1px solid var(--line); }
+  .loghead b { color: var(--chalk); }
+  .logrow { padding: 8px 16px; font-size: 13px; color: var(--dim);
+            border-bottom: 1px solid var(--line); cursor: pointer; }
+  .logrow:active { background: var(--panel-2); }
+  .logrow.sub { padding-left: 32px; font-size: 12px; }
+  .logrow.boxed { border: 2px solid var(--turf-deep); border-radius: 10px; margin: 4px 10px;
+                  color: var(--chalk); background: var(--panel); }
+  .logqtr { text-align: center; font-size: 12px; color: var(--dim); padding: 10px 0;
+            letter-spacing: .04em; }
+  .delplay { width: 100%; height: 46px; margin-top: 14px; background: none;
+             border: 1px solid var(--pen); color: var(--pen); border-radius: var(--radius);
+             font-size: 14px; }
+  .cascade { font-size: 13px; color: var(--chalk); padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  .cascade.conflict { color: var(--pen); font-weight: 600; }
+  .cascade .held { color: var(--turf); font-weight: 600; font-size: 12px; }
+  button {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--chalk);
+    border-radius: var(--radius); font-family: inherit; cursor: pointer;
+    transition: transform .04s ease, background .12s ease;
+  }
+  button:active { transform: scale(.97); }
+  button:focus-visible { outline: 2px solid var(--turf); outline-offset: 2px; }
+  button.sel { background: var(--turf); color: #06241a; border-color: var(--turf); }
+  button.muted { background: var(--panel); color: var(--dim); }
+
+  /* ---------- entry panel ---------- */
+  .panel { margin-top: 14px; background: var(--panel); border: 1px solid var(--line);
+           border-radius: var(--radius); padding: 14px; }
+  .panel.hidden { display: none; }
+  .panel h3 { margin: 0 0 12px; font-size: 13px; color: var(--dim); font-weight: 600;
+              text-transform: uppercase; letter-spacing: .06em; }
+
+  .passtoggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .passtoggle button { height: 48px; font-size: 15px; font-weight: 600; }
+
+  .fields { display: flex; gap: 10px; margin-bottom: 12px; }
+  .field { flex: 1; }
+  .field label { display: block; font-size: 11px; color: var(--dim); margin-bottom: 5px; }
+  .field label .req { color: var(--turf); }
+  .field .val {
+    height: 52px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel-2); display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; cursor: pointer; user-select: none;
+  }
+  .field .val.active { border-color: var(--turf); box-shadow: 0 0 0 1px var(--turf); }
+  .field .val.empty { color: var(--dim); font-weight: 500; }
+
+  /* ---------- number pad ---------- */
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .pad button { height: 50px; font-size: 22px; font-weight: 600; }
+  .pad .sign { color: var(--flag); font-weight: 700; }
+  .pad .sign.neg { background: var(--flag); color: #2a2400; border-color: var(--flag); }
+  .pad .clr { font-size: 15px; color: var(--dim); }
+
+  /* ---------- save ---------- */
+  .save { width: 100%; height: 58px; font-size: 16px; font-weight: 700;
+          background: var(--turf); color: #06241a; border: none; border-radius: var(--radius);
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+  .save:disabled { background: var(--panel-2); color: var(--dim); }
+  .save .preview { font-size: 12px; font-weight: 600; opacity: .8; }
+
+  /* ---------- last play strip ---------- */
+  .last { border-top: 1px solid var(--line); padding: 12px 16px;
+          display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .last .txt { font-size: 13px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .last .txt b { color: var(--chalk); font-weight: 600; }
+  .last .edit { flex: 0 0 auto; background: none; border: 1px solid var(--line);
+                color: var(--dim); height: 34px; padding: 0 12px; font-size: 12px; border-radius: 9px; }
+  .last.empty .txt { font-style: italic; }
+
+  /* ---------- setup screen ---------- */
+  .setup { padding: 28px 20px; }
+  .setup h1 { font-size: 22px; margin: 0 0 4px; }
+  .setup p { color: var(--dim); font-size: 13px; margin: 0 0 22px; }
+  .setup label { display: block; font-size: 12px; color: var(--dim); margin: 14px 0 5px; }
+  .setup input, .setup select {
+    width: 100%; height: 48px; padding: 0 12px; font-size: 16px; font-family: inherit;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--chalk);
+  }
+  .setup .kick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px 2px; margin: 2px 0 10px; }
+  .sheet .swatches button.sw, .swatches .sw { height: auto; width: auto; margin: 0; padding: 4px 0 2px;
+         background: none; border: none; border-radius: 10px; display: flex; flex-direction: column;
+         align-items: center; gap: 4px; text-align: center; font-size: 10px; }
+  .swatches .dot { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.28);
+                   box-shadow: 0 0 0 2px transparent; transition: box-shadow .12s ease; }
+  .swatches .nm { color: var(--dim); font-size: 10px; line-height: 1.1; white-space: nowrap; }
+  .swatches .sw.sel .dot { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--chalk); }
+  .swatches .sw.sel .nm { color: var(--chalk); font-weight: 700; }
+  .sheet { max-height: 92dvh; overflow-y: auto; }
+  .setup .swatch { width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--line);
+                   flex: 0 0 auto; background: var(--panel-2); }
+  .setup .kick button { height: 48px; font-weight: 600; }
+  .setup .start { margin-top: 26px; width: 100%; height: 56px; font-size: 17px; font-weight: 700;
+                  background: var(--turf); color: #06241a; border: none; border-radius: var(--radius); }
+  .resume { margin-top: 14px; width: 100%; height: 46px; background: var(--panel); color: var(--dim);
+            border: 1px solid var(--line); border-radius: 12px; font-size: 13px; }
+
+  /* ---------- Phase 5: stats ---------- */
+  .stats { padding-bottom: 24px; }
+  .st-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 6px 4px 2px; }
+  .st-team { display: flex; align-items: baseline; gap: 10px; }
+  .st-team:last-child { justify-content: flex-end; }
+  .st-team .abbr { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+  .st-team .pts { font-size: 40px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+  .st-status { font-size: 12px; color: var(--dim); padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .linescore { width: 100%; border-collapse: collapse; margin: 12px 0 2px; font-size: 13px; }
+  .linescore th, .linescore td { text-align: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .linescore tr:first-child th { color: var(--dim); font-weight: 500; font-size: 11px; }
+  .linescore th:first-child { text-align: left; width: 22%; font-weight: 700; }
+  .linescore td { color: var(--dim); }
+  .linescore .tot { color: var(--chalk); font-weight: 700; }
+  .st-panel h3 { margin-bottom: 6px; }
+  .cmp { display: grid; grid-template-columns: 1fr 1.3fr 1fr; align-items: center; padding: 8px 0;
+         border-bottom: 1px solid var(--line); }
+  .cmp:last-child { border-bottom: none; }
+  .cmp .l { text-align: left; font-size: 17px; font-weight: 700; }
+  .cmp .r { text-align: right; font-size: 17px; font-weight: 700; }
+  .cmp .m { text-align: center; font-size: 12px; color: var(--dim); line-height: 1.25; }
+  .cmp .m small { display: block; font-size: 10px; opacity: .75; }
+  .cmp.head { padding: 2px 0 6px; }
+  .cmp.head .l, .cmp.head .r { font-size: 12px; letter-spacing: .04em; }
+  .ldr { padding: 6px 0 4px; }
+  .ldr-cat { font-size: 11px; color: var(--dim); margin-bottom: 5px; }
+  .ldr-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ldr-cell { border-left: 3px solid; padding: 3px 0 3px 9px; font-size: 12px; color: var(--dim); line-height: 1.35; }
+  .ldr-cell b { display: block; font-size: 16px; color: var(--chalk); }
+  .ldr-cell.empty { font-size: 16px; }
+  .scr { display: grid; grid-template-columns: 44px 36px 1fr auto; gap: 6px; align-items: baseline;
+         padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; cursor: pointer; }
+  .scr:last-child { border-bottom: none; }
+  .scr .q { color: var(--dim); font-size: 11px; }
+  .scr .who { font-weight: 700; font-size: 12px; }
+  .scr .sc { color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .st-empty { color: var(--dim); font-size: 13px; padding: 6px 0; }
+  .st-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 10px; }
+  .st-actions button { min-height: 46px; font-size: 13px; font-weight: 600; padding: 6px 8px; }
+  .bx-tabs { margin: 0 0 4px; }
+  .bx-tabs .chip { flex: 1; }
+  .bx-sum { font-size: 13px; color: var(--dim); line-height: 1.6; padding: 4px 2px 0; }
+  .bx-sum b { color: var(--chalk); }
+  .bxwrap { overflow-x: auto; }
+  .bx { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .bx th, .bx td { padding: 7px 4px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  .bx th { text-align: left; font-weight: 700; }
+  .bx tr:first-child td { color: var(--dim); font-size: 11px; font-weight: 500; }
+  .bx tr:last-child th, .bx tr:last-child td { border-bottom: none; }
+  .bx tr.nonum th, .bx tr.nonum td { color: var(--flag); font-style: italic; cursor: pointer; }
+  .bx tr.total th, .bx tr.total td { color: var(--dim); font-weight: 600; border-top: 1px solid var(--dim); }
+  .st-note { font-size: 12px; color: var(--dim); margin-top: 12px; line-height: 1.45; }
+  .exporttext { max-height: 38vh; overflow: auto; background: var(--bg); border: 1px solid var(--line);
+                border-radius: 10px; padding: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap;
+                color: var(--chalk); margin: 0 0 10px; user-select: text; -webkit-user-select: text; }
+  /* game clock + timeouts */
+  .abbr-col { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tos { display: inline-flex; gap: 4px; }
+  .tos i { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid #FFC72C; opacity: .45; }
+  .tos i.on { background: #FFC72C; opacity: 1; }
+  .clockrow { align-items: flex-end; }
+  .clockhint { flex: 1; font-size: 12px; color: var(--dim); padding-bottom: 12px; line-height: 1.3; }
+  .val.bad { color: var(--flag); border-color: var(--flag); }
+  .scr .tm { color: var(--chalk); font-size: 11px; white-space: nowrap; }
+  .scr .tm.missing { color: var(--flag); font-weight: 600; }
+  .scr.to .what { color: var(--dim); }
+  /* game end + email */
+  .final-panel { border-color: var(--turf); }
+  .emailin { width: 100%; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg);
+             color: var(--chalk); font-size: 16px; padding: 0 14px; margin: 0 0 10px; }
+  .emailnote { font-size: 12px; color: var(--dim); line-height: 1.45; margin: 2px 0 6px; }
+  .sharegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .exportwrap summary { font-size: 13px; color: var(--dim); padding: 10px 2px; cursor: pointer; }
+  .final-panel button { width: 100%; min-height: 50px; border-radius: 12px; margin-bottom: 8px; font-size: 15px;
+                        font-weight: 600; background: var(--panel-2); color: var(--chalk); border: 1px solid var(--line); }
+  .final-panel button.sel { background: var(--turf); color: #06241a; border-color: var(--turf); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============================================================
+   FOOTBALL STATS ENGINE — Phase 1
+   Pure game logic. No DOM, no storage, no UI.
+
+   Core architecture:
+   - A game is { config, plays[] }. Nothing else is stored.
+   - State is ALWAYS derived by replaying plays from the start
+     (reduceGame). Live entry = append play + replay.
+     Corrections = edit play + replay. Stats (Phase 5) will be
+     another fold over the same log.
+   - Field position: absolute 1-99, always in the possessing
+     team's frame. Possession flip = 100 - pos.
+   - Anchored plays (penalty confirms, turnover spots, muffed
+     punts) set position from user input, not math — so any
+     correction cascade naturally stops at the next anchor.
+   ============================================================ */
+
+const FootballEngine = (() => {
+
+  const TOUCHBACK_SPOT = 20;        // NFHS free kick & punt touchback
+  const KICKOFF_DEFAULT = 40;       // kickoff spot, editable per kick
+  const FREE_KICK_DEFAULT = 20;     // free kick after safety
+  const KICK_OOB_SPOT = 35;         // kickoff out of bounds, overrideable
+
+  /* ---------- helpers ---------- */
+
+  const flip = (pos) => 100 - pos;
+
+  function autoAbbr(name) {
+    return (name || "TEAM").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "TM";
+  }
+
+  function ordinal(n) {
+    return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : n + "th";
+  }
+
+  function clamp(pos) {
+    return Math.max(0, Math.min(100, pos));
+  }
+
+  /* Display translation: the ONLY place 1-99 becomes human.
+     pos < 50 -> possessing team's side, descending past midfield. */
+  function displayYardLine(pos, possessionAbbr, config) {
+    const opp = otherTeam(possessionAbbr, config);
+    if (pos <= 0) return possessionAbbr + " goal line";
+    if (pos >= 100) return opp + " goal line";
+    if (pos < 50) return possessionAbbr + " " + pos;
+    if (pos === 50) return "50";
+    return opp + " " + (100 - pos);
+  }
+
+  function otherTeam(abbr, config) {
+    return abbr === config.homeTeam.abbr ? config.awayTeam.abbr : config.homeTeam.abbr;
+  }
+
+  function toGo(state) {
+    const target = state.goalToGo ? 100 : state.firstDownAt;
+    return target - state.ballOn;
+  }
+
+  function situationText(state, config) {
+    if (state.phase === "TRY") return "Try (" + state.possession + ")";
+    if (state.phase === "KICKOFF") return "Kickoff — " + state.possession + " kicking";
+    if (state.phase === "FREE_KICK") return "Free kick — " + state.possession + " kicking";
+    return ordinal(state.down) + " & " + (state.goalToGo ? "goal" : toGo(state)) +
+      " \u00B7 " + displayYardLine(state.ballOn, state.possession, config);
+  }
+
+  /* ---------- game creation ---------- */
+
+  function createGame(cfg) {
+    const home = { name: cfg.homeName, abbr: cfg.homeAbbr || autoAbbr(cfg.homeName), color: cfg.homeColor || null };
+    const away = { name: cfg.awayName, abbr: cfg.awayAbbr || autoAbbr(cfg.awayName), color: cfg.awayColor || null };
+    if (home.abbr === away.abbr) away.abbr = away.abbr.slice(0, 2) + "2";
+    return {
+      config: {
+        homeTeam: home,
+        awayTeam: away,
+        date: cfg.date || null,
+        quarterLength: cfg.quarterLength || "12:00",
+        whoKicksOff: cfg.whoKicksOff || home.abbr
+      },
+      plays: [],
+      nextId: 1
+    };
+  }
+
+  /* ---------- the reducer: plays -> state ---------- */
+
+  function initialState(config) {
+    const score = {};
+    score[config.homeTeam.abbr] = 0;
+    score[config.awayTeam.abbr] = 0;
+    return {
+      quarter: 1,
+      phase: "KICKOFF",              // KICKOFF | PLAY | TRY | FREE_KICK
+      possession: config.whoKicksOff, // during KICKOFF/FREE_KICK = kicking team
+      down: 1,
+      firstDownAt: 0,
+      goalToGo: false,
+      ballOn: 0,
+      score: score,
+      kickDefault: KICKOFF_DEFAULT
+    };
+  }
+
+  function firstDown(state, at) {
+    state.down = 1;
+    state.ballOn = at;
+    if (at + 10 >= 100) {
+      state.goalToGo = true;
+      state.firstDownAt = 100;
+    } else {
+      state.goalToGo = false;
+      state.firstDownAt = at + 10;
+    }
+  }
+
+  function changePossession(state, config, at) {
+    state.possession = otherTeam(state.possession, config);
+    state.phase = "PLAY";
+    firstDown(state, at);
+  }
+
+  function awardTouchdown(state, config, scoringTeam, events) {
+    state.score[scoringTeam] += 6;
+    state.phase = "TRY";
+    state.possession = scoringTeam;
+    state.ballOn = 100;
+    events.push("TOUCHDOWN");
+  }
+
+  function awardSafety(state, config, events) {
+    const defense = otherTeam(state.possession, config);
+    state.score[defense] += 2;
+    state.phase = "FREE_KICK";       // offense free kicks from their 20
+    state.kickDefault = FREE_KICK_DEFAULT;
+    state.ballOn = 0;
+    events.push("SAFETY");
+  }
+
+  /* Standard down progression after an offensive play ending at `after`. */
+  function progressDowns(state, config, after, events, conflicts, play) {
+    const recordedTD = play.input.result === "TOUCHDOWN";
+    const mathTD = after >= 100;
+    const mathSafety = after <= 0;
+
+    if (recordedTD && !mathTD) {
+      conflicts.push({
+        playId: play.id,
+        type: "TD_NOT_REACHED",
+        message: "Recorded touchdown, but recalculated spot is " +
+          displayYardLine(after, state.possession, config)
+      });
+    }
+    if (!recordedTD && mathTD && play.input.result !== "SAFETY") {
+      conflicts.push({
+        playId: play.id,
+        type: "TD_NOT_RECORDED",
+        message: "Recalculated position reaches the goal line but play is not marked touchdown"
+      });
+    }
+
+    if (recordedTD || mathTD) {                 // trust recorded result for replay
+      awardTouchdown(state, config, state.possession, events);
+      return;
+    }
+    if (mathSafety || play.input.result === "SAFETY") {
+      awardSafety(state, config, events);
+      return;
+    }
+
+    const target = state.goalToGo ? 100 : state.firstDownAt;
+    if (after >= target) {
+      firstDown(state, after);
+      events.push("FIRST_DOWN");
+      return;
+    }
+    state.ballOn = after;
+    if (state.down >= 4) {
+      events.push("TURNOVER_ON_DOWNS");
+      changePossession(state, config, clamp(flip(after)));
+    } else {
+      state.down += 1;
+    }
+  }
+
+  /* ---------- per-play handlers ----------
+     Each receives (state, config, play, events, conflicts),
+     mutates state, and may set play.anchored. */
+
+  const handlers = {
+
+    KICKOFF(state, config, play, events) {
+      const inp = play.input;
+      const kicking = state.possession;
+      const kickFrom = inp.kickFrom != null ? inp.kickFrom : state.kickDefault;
+      state.kickDefault = KICKOFF_DEFAULT;
+      const landing = clamp(kickFrom + (inp.distance || 0));
+
+      switch (inp.result) {
+        case "TOUCHBACK":
+          changePossession(state, config, TOUCHBACK_SPOT); break;
+        case "ONSIDE_RECOVERED":
+          state.phase = "PLAY";
+          firstDown(state, landing);
+          events.push("ONSIDE_RECOVERED");
+          break;
+        case "ONSIDE_LOST":
+          changePossession(state, config, clamp(flip(landing))); break;
+        case "OUT_OF_BOUNDS":
+          play.anchored = inp.finalSpot != null;
+          changePossession(state, config, inp.finalSpot != null ? inp.finalSpot : KICK_OOB_SPOT);
+          break;
+        case "TOUCHDOWN": {
+          const receiver = otherTeam(kicking, config);
+          awardTouchdown(state, config, receiver, events);
+          break;
+        }
+        default: { // RETURNED
+          const after = clamp(flip(landing) + (inp.returnYards || 0));
+          if (after >= 100) {
+            awardTouchdown(state, config, otherTeam(kicking, config), events);
+          } else {
+            changePossession(state, config, after);
+          }
+        }
+      }
+    },
+
+    RUN(state, config, play, events, conflicts) {
+      const after = clamp(state.ballOn + (play.input.yards || 0));
+      progressDowns(state, config, after, events, conflicts, play);
+    },
+
+    PASS(state, config, play, events, conflicts) {
+      if (!play.input.complete) {
+        progressDowns(state, config, state.ballOn, events, conflicts, play);
+        return;
+      }
+      const after = clamp(state.ballOn + (play.input.yards || 0));
+      progressDowns(state, config, after, events, conflicts, play);
+    },
+
+    KNEEL(state, config, play, events, conflicts) {
+      progressDowns(state, config, state.ballOn, events, conflicts, play);
+    },
+
+    PUNT(state, config, play, events) {
+      const inp = play.input;
+      const landing = state.ballOn + (inp.distance || 0);
+      switch (inp.result) {
+        case "TOUCHBACK":
+          changePossession(state, config, TOUCHBACK_SPOT); break;
+        case "FAIR_CATCH":
+        case "DOWNED":
+        case "OUT_OF_BOUNDS":
+          changePossession(state, config, clamp(flip(clamp(landing)))); break;
+        case "MUFFED":
+          play.anchored = true;
+          if (inp.recoveredByTeam === state.possession) {
+            state.phase = "PLAY";
+            firstDown(state, inp.finalSpot);
+          } else {
+            changePossession(state, config, inp.finalSpot);
+          }
+          break;
+        case "TOUCHDOWN":
+          awardTouchdown(state, config, otherTeam(state.possession, config), events);
+          break;
+        default: { // RETURNED
+          if (landing >= 100) { changePossession(state, config, TOUCHBACK_SPOT); break; }
+          const after = clamp(flip(landing) + (inp.returnYards || 0));
+          if (after >= 100) awardTouchdown(state, config, otherTeam(state.possession, config), events);
+          else changePossession(state, config, after);
+        }
+      }
+    },
+
+    TURNOVER(state, config, play, events) {
+      const inp = play.input;             // finalSpot is in the NEW team's frame
+      play.anchored = true;
+      if (inp.result === "TOUCHDOWN") {
+        awardTouchdown(state, config, otherTeam(state.possession, config), events);
+      } else if (inp.result === "TOUCHBACK") {
+        changePossession(state, config, TOUCHBACK_SPOT);
+      } else {
+        changePossession(state, config, inp.finalSpot);
+      }
+      events.push(inp.turnoverType === "INTERCEPTION" ? "INTERCEPTION" : "FUMBLE_LOST");
+    },
+
+    PENALTY(state, config, play, events) {
+      const inp = play.input;
+      if (inp.accepted && inp.confirm) {  // user confirms the resulting situation
+        play.anchored = true;
+        state.down = inp.confirm.down;
+        state.ballOn = inp.confirm.ballOn;
+        const target = inp.confirm.ballOn + inp.confirm.toGo;
+        if (target >= 100) { state.goalToGo = true; state.firstDownAt = 100; }
+        else { state.goalToGo = false; state.firstDownAt = target; }
+        events.push("PENALTY_" + inp.team);
+      }
+    },
+
+    FIELD_GOAL(state, config, play, events) {
+      const inp = play.input;
+      if (inp.result === "GOOD") {
+        state.score[state.possession] += 3;
+        state.phase = "KICKOFF";
+        state.kickDefault = KICKOFF_DEFAULT;
+        events.push("FIELD_GOAL_GOOD");
+      } else {
+        const spot = inp.finalSpot != null ? inp.finalSpot : clamp(flip(state.ballOn));
+        if (inp.finalSpot != null) play.anchored = true;
+        changePossession(state, config, spot);
+        events.push("FIELD_GOAL_MISSED");
+      }
+    },
+
+    TRY(state, config, play, events, conflicts) {
+      if (state.phase !== "TRY") {
+        // A try with no touchdown before it (the TD was edited away or deleted).
+        // Don't score it; surface it for the user to delete or repair.
+        conflicts.push({ playId: play.id, type: "ORPHANED_TRY",
+          message: "Try recorded but no touchdown precedes it — delete this try or restore the score" });
+        return;
+      }
+      const inp = play.input;
+      const scoring = state.possession;
+      if (inp.result === "GOOD") {
+        state.score[scoring] += (inp.tryType === "KICK" ? 1 : 2);
+        events.push("TRY_GOOD");
+      } else if (inp.result === "DEFENSIVE_2PT") {
+        state.score[otherTeam(scoring, config)] += 2;
+        events.push("DEFENSIVE_2PT");
+      } else {
+        events.push("TRY_NO_GOOD");
+      }
+      state.phase = "KICKOFF";          // scoring team kicks off
+      state.kickDefault = KICKOFF_DEFAULT;
+    },
+
+    TIMEOUT() { /* recorded, no state change */ },
+
+    SET_SPOT(state, config, play, events) {
+      // Direct game-state set. An anchor: spot comes from the user, not math,
+      // so correction cascades stop here. Used to start tracking mid-drive
+      // or to recover from a state a phase can't yet enter.
+      const inp = play.input;
+      play.anchored = true;
+      state.phase = "PLAY";
+      if (inp.possession) state.possession = inp.possession;
+      const at = inp.ballOn != null ? inp.ballOn : state.ballOn;
+      state.down = inp.down || 1;
+      if (inp.toGo != null) {
+        const target = at + inp.toGo;
+        if (target >= 100) { state.goalToGo = true; state.firstDownAt = 100; }
+        else { state.goalToGo = false; state.firstDownAt = target; }
+        state.ballOn = at;
+      } else {
+        firstDown(state, at);          // default: fresh 1st & 10 from the spot
+        state.down = inp.down || 1;
+      }
+      events.push("SET_SPOT");
+    },
+
+    QUARTER_END(state, config, play, events) {
+      const ending = state.quarter;
+      state.quarter = state.quarter === 4 ? "OT" :
+        (typeof state.quarter === "number" ? state.quarter + 1 : "OT");
+      events.push("QUARTER_" + state.quarter);
+      // Halftime: the second half opens with a kickoff no matter where the
+      // first half ended (mid-drive, or right after a score's try/kickoff
+      // phase). Only plays recorded with halftimeKicker do this, so games
+      // saved before this rule replay exactly as they did.
+      const kicker = play.input && play.input.halftimeKicker;
+      if (ending === 2 && kicker) {
+        state.phase = "KICKOFF";
+        state.possession = kicker;
+        state.kickDefault = KICKOFF_DEFAULT;
+        state.ballOn = 0;
+        state.down = 1;
+        events.push("HALFTIME");
+      }
+    }
+  };
+
+  /* ---------- replay ---------- */
+
+  function reduceGame(game) {
+    const state = initialState(game.config);
+    const snapshots = [];
+    const conflicts = [];
+    const allEvents = [];
+
+    for (const play of game.plays) {
+      const before = {
+        ballOnBefore: state.ballOn,
+        possession: state.possession,
+        phase: state.phase,
+        down: state.down,
+        toGo: state.phase === "PLAY" ? toGo(state) : null,
+        quarter: state.quarter
+      };
+      const events = [];
+      const h = handlers[play.type];
+      if (!h) throw new Error("Unknown play type: " + play.type);
+      h(state, game.config, play, events, conflicts);
+
+      const snap = Object.assign({}, before, {
+        playId: play.id,
+        ballOnAfter: state.ballOn,
+        possessionAfter: state.possession,
+        events: events
+      });
+      play.computed = snap;            // attached for log display & corrections
+      snapshots.push(snap);
+      allEvents.push(events);
+    }
+    return { state, snapshots, conflicts };
+  }
+
+  /* ---------- public ops ---------- */
+
+  function applyPlay(game, type, input, opts) {
+    const play = {
+      id: game.nextId++,
+      timestamp: (opts && opts.timestamp) || Date.now(),
+      gameClock: input.gameClock || null,
+      type: type,
+      input: input,
+      anchored: false,
+      notes: input.notes || null,
+      editHistory: []
+    };
+    game.plays.push(play);
+    const result = reduceGame(game);
+
+    // freeze auto-detected results into the record so replay trusts them
+    const lastEvents = play.computed.events;
+    if (lastEvents.includes("TOUCHDOWN") && !play.input.result) play.input.result = "TOUCHDOWN";
+    if (lastEvents.includes("SAFETY") && !play.input.result) play.input.result = "SAFETY";
+
+    return { play, state: result.state, events: lastEvents, conflicts: result.conflicts };
+  }
+
+  function getState(game) {
+    return reduceGame(game).state;
+  }
+
+  /* Preview a historical edit: returns the per-play diff and any
+     conflicts, WITHOUT committing. Cascade is naturally bounded by
+     the next anchored play. */
+  function previewEdit(game, playId, newInput) {
+    const before = reduceGame(game).snapshots;
+    const target = game.plays.find(p => p.id === playId);
+    if (!target) throw new Error("No play with id " + playId);
+
+    const saved = target.input;
+    target.input = Object.assign({}, saved, newInput);
+    const after = reduceGame(game);
+    target.input = saved;             // restore
+    reduceGame(game);                 // restore computed snapshots
+
+    const changes = [];
+    for (let i = 0; i < before.length; i++) {
+      const a = before[i], b = after.snapshots[i];
+      if (a.ballOnBefore !== b.ballOnBefore || a.ballOnAfter !== b.ballOnAfter ||
+          a.down !== b.down || a.toGo !== b.toGo || a.possession !== b.possession) {
+        // anchorHeld: entering situation shifted but the play's confirmed
+        // output is unchanged — this play terminates the cascade.
+        const anchorHeld = a.ballOnAfter === b.ballOnAfter &&
+          a.possessionAfter === b.possessionAfter && a.ballOnBefore !== b.ballOnBefore;
+        changes.push({ playId: a.playId, before: a, after: b, anchorHeld });
+      }
+    }
+    return { changes, conflicts: after.conflicts, newState: after.state };
+  }
+
+  function commitEdit(game, playId, newInput) {
+    const target = game.plays.find(p => p.id === playId);
+    if (!target) throw new Error("No play with id " + playId);
+    target.editHistory.push({ at: Date.now(), before: Object.assign({}, target.input) });
+    target.input = Object.assign({}, target.input, newInput);
+    return reduceGame(game);
+  }
+
+  function endQuarter(game, input) {
+    return applyPlay(game, "QUARTER_END", input || {});
+  }
+
+  return {
+    createGame, applyPlay, getState, reduceGame,
+    previewEdit, commitEdit, endQuarter,
+    displayYardLine, situationText, toGo, flip, autoAbbr, otherTeam,
+    TOUCHBACK_SPOT, KICKOFF_DEFAULT, FREE_KICK_DEFAULT
+  };
+})();
+
+/* ============================================================
+   FOOTBALL STATS — Phase 5
+   One more fold over the play log. Nothing here is stored:
+   every call replays the game first, so a correction anywhere
+   in the log shows up in these numbers immediately.
+
+   Conventions (NFHS / agreed spec):
+   - Sacks and scrambles are RUN plays, so they count in rushing.
+   - Kneels: 0 yards, not a rushing attempt, not a play.
+   - An interception (TURNOVER/INTERCEPTION) is a pass attempt
+     charged to the passer (thrownBy).
+   - A lost fumble counts as an offensive play for 0 yards.
+   - Try yardage is not counted; tries show as PAT / 2-pt.
+   - A play with no jersey number lands in the "unattributed"
+     row (player: null) of its table.
+   ============================================================ */
+const FootballStats = (() => {
+  const E = FootballEngine;
+
+  const TEMPLATES = {
+    rushing:     { att:0, yds:0, td:0, long:null },
+    passing:     { comp:0, att:0, int:0, yds:0, td:0, long:null },
+    receiving:   { rec:0, yds:0, td:0, long:null },
+    kicking:     { fgm:0, fga:0, fgLong:null, patm:0, pata:0, ko:0, koTB:0 },
+    punting:     { no:0, yds:0, long:null },
+    kickReturns: { no:0, yds:0, td:0, long:null },
+    puntReturns: { no:0, yds:0, td:0, long:null },
+    defense:     { int:0, intYds:0, fr:0, td:0 }
+  };
+  const TABLES = Object.keys(TEMPLATES);
+
+  function blankTeam(team, side) {
+    const t = { abbr: team.abbr, name: team.name, side,
+      totals: { points:0, firstDowns:0, fdRush:0, fdPass:0, fdPen:0,
+                rushAtt:0, rushYds:0, passComp:0, passAtt:0, passInt:0, passYds:0,
+                plays:0, totalYds:0, ypp:null, fumblesLost:0, turnovers:0,
+                penalties:0, penYds:0, thirdConv:0, thirdAtt:0, fourthConv:0, fourthAtt:0,
+                twoPtMade:0, twoPtAtt:0 } };
+    TABLES.forEach(k => t[k] = {});
+    return t;
+  }
+
+  const hasNum = n => n !== null && n !== undefined && n !== "";
+  function row(team, table, num) {
+    const key = hasNum(num) ? "n" + num : "none";
+    if (!team[table][key])
+      team[table][key] = Object.assign({ player: hasNum(num) ? Number(num) : null }, TEMPLATES[table]);
+    return team[table][key];
+  }
+  const longest = (cur, v) => (cur === null || v > cur) ? v : cur;
+  const tag = n => hasNum(n) ? "#" + n + " " : "";
+
+  /* sort numbered players by the table's main number; "no #" always last */
+  const SORT = { rushing:"yds", passing:"att", receiving:"yds", kicking:"fga", punting:"no",
+                 kickReturns:"yds", puntReturns:"yds", defense:"int" };
+  function finalizeTable(obj, key) {
+    const rows = Object.values(obj);
+    const named = rows.filter(r => r.player !== null)
+      .sort((a, b) => (b[key] - a[key]) || (a.player - b.player));
+    const none = rows.filter(r => r.player === null);
+    return named.concat(none);
+  }
+
+  function aggregate(game) {
+    const { state } = E.reduceGame(game);      // always fresh
+    const c = game.config;
+    const H = c.homeTeam.abbr, A = c.awayTeam.abbr;
+    const teams = {};
+    teams[H] = blankTeam(c.homeTeam, "home");
+    teams[A] = blankTeam(c.awayTeam, "away");
+    const other = ab => ab === H ? A : H;
+
+    const line = {}; line[H] = [0,0,0,0,0]; line[A] = [0,0,0,0,0];
+    const running = {}; running[H] = 0; running[A] = 0;
+    const scoring = [];
+    const timeouts = [];
+    let openTD = null;                        // TD entry waiting for its try
+
+    function points(team, pts, quarter) {
+      running[team] += pts;
+      teams[team].totals.points += pts;
+      line[team][typeof quarter === "number" ? Math.min(quarter, 4) - 1 : 4] += pts;
+    }
+    function score(team, pts, quarter, text, play) {
+      points(team, pts, quarter);
+      const e = { quarter, team, text, playId: play.id, home: running[H], away: running[A],
+                  clock: play.input && play.input.clock != null ? play.input.clock : null };
+      scoring.push(e);
+      return e;
+    }
+    function downs(T, cm, converted) {
+      if (cm.phase !== "PLAY") return;
+      if (cm.down === 3) { T.totals.thirdAtt++; if (converted) T.totals.thirdConv++; }
+      if (cm.down === 4) { T.totals.fourthAtt++; if (converted) T.totals.fourthConv++; }
+    }
+
+    for (const p of game.plays) {
+      const cm = p.computed || {}, inp = p.input || {}, ev = cm.events || [];
+      const off = cm.possession, def = other(off);
+      const T = teams[off], D = teams[def];
+      if (!T || !D) continue;
+      const q = cm.quarter;
+      const td = ev.includes("TOUCHDOWN");
+      const tdTeam = cm.possessionAfter;        // engine hands the ball to the scorer
+      const fd = ev.includes("FIRST_DOWN");
+
+      switch (p.type) {
+        case "RUN": {
+          const y = inp.yards || 0;
+          const r = row(T, "rushing", inp.runner);
+          r.att++; r.yds += y; r.long = longest(r.long, y);
+          T.totals.rushAtt++; T.totals.rushYds += y; T.totals.plays++;
+          if (fd) T.totals.fdRush++;
+          downs(T, cm, fd || td);
+          if (td) { r.td++; openTD = score(tdTeam, 6, q, `${tag(inp.runner)}${y}-yd run`, p); }
+          break;
+        }
+        case "PASS": {
+          const r = row(T, "passing", inp.passer);
+          r.att++; T.totals.passAtt++; T.totals.plays++;
+          if (inp.complete) {
+            const y = inp.yards || 0;
+            const rc = row(T, "receiving", inp.receiver);
+            r.comp++; r.yds += y; r.long = longest(r.long, y);
+            rc.rec++; rc.yds += y; rc.long = longest(rc.long, y);
+            T.totals.passComp++; T.totals.passYds += y;
+            if (td) {
+              r.td++; rc.td++;
+              const from = hasNum(inp.passer) ? ` from #${inp.passer}` : "";
+              openTD = score(tdTeam, 6, q, `${tag(inp.receiver)}${y}-yd pass${from}`, p);
+            }
+          }
+          if (fd) T.totals.fdPass++;
+          downs(T, cm, fd || td);
+          break;
+        }
+        case "TURNOVER": {
+          const ret = inp.returnYards || 0;
+          const dr = row(D, "defense", inp.recoveredBy);
+          T.totals.plays++; T.totals.turnovers++;
+          downs(T, cm, false);
+          let kind;
+          if (inp.turnoverType === "INTERCEPTION") {
+            const r = row(T, "passing", inp.thrownBy);
+            r.att++; r.int++;
+            T.totals.passAtt++; T.totals.passInt++;
+            dr.int++; dr.intYds += ret;
+            kind = "interception";
+          } else {
+            T.totals.fumblesLost++;
+            dr.fr++;
+            kind = "fumble";
+          }
+          if (td) { dr.td++; openTD = score(tdTeam, 6, q, `${tag(inp.recoveredBy)}${ret}-yd ${kind} return`, p); }
+          break;
+        }
+        case "KICKOFF": {
+          const k = row(T, "kicking", inp.kicker);
+          k.ko++;
+          if (inp.result === "TOUCHBACK") k.koTB++;
+          if (inp.result === "RETURNED" || inp.result === "TOUCHDOWN") {
+            const ret = inp.returnYards || 0;
+            const r = row(D, "kickReturns", inp.returner);
+            r.no++; r.yds += ret; r.long = longest(r.long, ret);
+            if (td) r.td++;
+          }
+          if (td) openTD = score(tdTeam, 6, q, `${tag(inp.returner)}${inp.returnYards || 0}-yd kickoff return`, p);
+          break;
+        }
+        case "PUNT": {
+          const k = row(T, "punting", inp.punter);
+          const dist = inp.distance ? inp.distance
+            : (inp.result === "TOUCHBACK" ? 100 - (cm.ballOnBefore || 0) : 0);
+          k.no++; k.yds += dist; if (dist) k.long = longest(k.long, dist);
+          if (inp.result === "RETURNED" || inp.result === "TOUCHDOWN") {
+            const ret = inp.returnYards || 0;
+            const r = row(D, "puntReturns", inp.returner);
+            r.no++; r.yds += ret; r.long = longest(r.long, ret);
+            if (td) r.td++;
+          }
+          if (td) openTD = score(tdTeam, 6, q, `${tag(inp.returner)}${inp.returnYards || 0}-yd punt return`, p);
+          break;
+        }
+        case "FIELD_GOAL": {
+          const dist = (100 - cm.ballOnBefore) + 10;
+          const k = row(T, "kicking", inp.kicker);
+          k.fga++;
+          if (inp.result === "GOOD") {
+            k.fgm++; k.fgLong = longest(k.fgLong, dist);
+            score(off, 3, q, `${tag(inp.kicker)}${dist}-yd field goal`, p);
+          }
+          openTD = null;
+          break;
+        }
+        case "PENALTY": {
+          const P = teams[inp.team];
+          if (P && inp.accepted) {
+            P.totals.penalties++; P.totals.penYds += Math.abs(inp.yards || 0);
+            const cf = inp.confirm;
+            if (inp.team === def && cf && cf.down === 1 && cm.phase === "PLAY" &&
+                (inp.automaticFirstDown || (cf.ballOn - cm.ballOnBefore) >= cm.toGo)) {
+              T.totals.fdPen++;
+            }
+          }
+          break;
+        }
+        case "TIMEOUT": {
+          if (teams[inp.team]) timeouts.push({ quarter: q, team: inp.team, playId: p.id,
+                                               clock: inp.clock != null ? inp.clock : null });
+          break;
+        }
+        case "TRY": {
+          const good = ev.includes("TRY_GOOD"), defTwo = ev.includes("DEFENSIVE_2PT");
+          if (!good && !defTwo && !ev.includes("TRY_NO_GOOD")) break;   // orphaned try: not scored
+          let note;
+          if (inp.tryType === "KICK") {
+            const k = row(T, "kicking", inp.kicker);
+            k.pata++; if (good) k.patm++;
+            note = good ? `${tag(inp.kicker)}kick` : "kick failed";
+          } else {
+            T.totals.twoPtAtt++; if (good) T.totals.twoPtMade++;
+            if (!good) note = (inp.tryType === "RUN" ? "run" : "pass") + " failed";
+            else if (inp.tryType === "RUN") note = `${tag(inp.runner)}run`;
+            else note = hasNum(inp.passer) || hasNum(inp.receiver)
+              ? `pass${hasNum(inp.passer) ? " #" + inp.passer : ""}${hasNum(inp.receiver) ? " to #" + inp.receiver : ""}`
+              : "pass";
+          }
+          if (good) points(off, inp.tryType === "KICK" ? 1 : 2, q);
+          if (openTD) {
+            openTD.text += ` (${note})`;
+            openTD.home = running[H]; openTD.away = running[A];
+          }
+          if (defTwo) score(def, 2, q, "Defensive two-point return", p);
+          openTD = null;
+          break;
+        }
+      }
+      if (ev.includes("SAFETY")) { score(def, 2, q, "Safety", p); openTD = null; }
+    }
+
+    for (const ab of [H, A]) {
+      const t = teams[ab].totals;
+      t.firstDowns = t.fdRush + t.fdPass + t.fdPen;
+      t.totalYds = t.rushYds + t.passYds;
+      t.ypp = t.plays ? t.totalYds / t.plays : null;
+      TABLES.forEach(k => teams[ab][k] = finalizeTable(teams[ab][k], SORT[k]));
+    }
+
+    return { home: H, away: A, teams, line, scoring, timeouts, status: gameStatus(game, state),
+             overtime: (state.quarter === "OT" && !isFinal(game)) || (line[H][4] + line[A][4] > 0),
+             engineScore: state.score };
+  }
+
+  function gameDate(game) {
+    if (game.config.date) return game.config.date;
+    const first = game.plays.find(p => p.timestamp);
+    const d = first ? new Date(first.timestamp) : new Date();
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  function lastPlay(game) { return game.plays[game.plays.length - 1]; }
+  function isFinal(game, state) {
+    const lp = lastPlay(game);
+    if (!lp || lp.type !== "QUARTER_END") return false;
+    if (lp.input && lp.input.final) return true;          // ended by choice (tie, called game)
+    if (lp.computed.quarter !== 4 && lp.computed.quarter !== "OT") return false;
+    const sc = (state || E.reduceGame(game).state).score;
+    const [a, b] = Object.values(sc);
+    return a !== b;                      // tied after regulation/OT period -> keep playing
+  }
+  function gameStatus(game, state) {
+    const lp = lastPlay(game);
+    if (!lp) return "Pregame";
+    if (lp.type === "QUARTER_END") {
+      const q = lp.computed.quarter;
+      if (isFinal(game, state)) return "Final";
+      if (q === 4 || q === "OT") return q === 4 ? "End of regulation" : "End of OT period";
+      if (q === 2) return "Halftime";
+      return "End of Q" + q;
+    }
+    return state.quarter === "OT" ? "Overtime" : "Q" + state.quarter;
+  }
+
+  /* leaders: numbered players only — the unattributed row never "leads" */
+  function leader(team, table) {
+    const rows = team[table].filter(r => r.player !== null);
+    return rows.length ? rows[0] : null;
+  }
+
+  /* "RIV 14-7", "tied 7-7" */
+  function scoreLine(home, away, H, A) {
+    if (home === away) return `tied ${home}-${away}`;
+    return home > away ? `${H} ${home}-${away}` : `${A} ${away}-${home}`;
+  }
+
+  const clockStr = t => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+
+  /* ---------- plain-text export for texting / pasting ---------- */
+  function toText(S, game) {
+    const c = game.config, H = S.home, A = S.away;
+    const th = S.teams[H], ta = S.teams[A];
+    const out = [];
+    const dateStr = ` (${gameDate(game)})`;
+    out.push(`${th.name} ${th.totals.points}, ${ta.name} ${ta.totals.points} — ${S.status}${dateStr}`);
+    out.push("");
+
+    const cols = S.overtime ? 5 : 4;
+    out.push("Score by quarter");
+    for (const ab of [H, A])
+      out.push(`${ab}  ${S.line[ab].slice(0, cols).join("  ")}  = ${S.teams[ab].totals.points}`);
+    out.push("");
+
+    if (S.scoring.length) {
+      out.push("Scoring");
+      for (const e of S.scoring) {
+        const qn = typeof e.quarter === "number" ? "Q" + e.quarter : "OT";
+        out.push(`${qn}${e.clock != null ? " " + clockStr(e.clock) : ""} ${e.team} ${e.text}, ${scoreLine(e.home, e.away, H, A)}`);
+      }
+      out.push("");
+    }
+
+    if (S.timeouts.length) {
+      out.push("Timeouts");
+      for (const ab of [H, A]) {
+        const list = S.timeouts.filter(t => t.team === ab)
+          .map(t => `${typeof t.quarter === "number" ? "Q" + t.quarter : "OT"}${t.clock != null ? " " + clockStr(t.clock) : ""}`);
+        if (list.length) out.push(`${ab}: ${list.join(", ")}`);
+      }
+      out.push("");
+    }
+
+    const a = th.totals, b = ta.totals;
+    out.push(`Team stats (${H} / ${A})`);
+    out.push(`First downs: ${a.firstDowns} / ${b.firstDowns}`);
+    out.push(`Total yards: ${a.totalYds} / ${b.totalYds}`);
+    out.push(`Rushing: ${a.rushAtt} for ${a.rushYds} / ${b.rushAtt} for ${b.rushYds}`);
+    out.push(`Passing: ${a.passComp}-${a.passAtt}-${a.passInt}, ${a.passYds} yds / ${b.passComp}-${b.passAtt}-${b.passInt}, ${b.passYds} yds`);
+    out.push(`Turnovers: ${a.turnovers} / ${b.turnovers}`);
+    out.push(`Penalties: ${a.penalties}-${a.penYds} / ${b.penalties}-${b.penYds}`);
+    out.push(`3rd down: ${a.thirdConv}-${a.thirdAtt} / ${b.thirdConv}-${b.thirdAtt}`);
+    if (a.fourthAtt || b.fourthAtt) out.push(`4th down: ${a.fourthConv}-${a.fourthAtt} / ${b.fourthConv}-${b.fourthAtt}`);
+
+    const who = r => r.player === null ? "no #" : "#" + r.player;
+    const tds = n => n ? `, ${n} TD` : "";
+    for (const ab of [H, A]) {
+      const t = S.teams[ab];
+      const lines = [];
+      const add = (label, rows, fmt) => { if (rows.length) lines.push(`${label}: ${rows.map(fmt).join("; ")}`); };
+      add("Rushing", t.rushing, r => `${who(r)} ${r.att} for ${r.yds}${tds(r.td)}`);
+      add("Passing", t.passing, r => `${who(r)} ${r.comp}-${r.att}-${r.int}, ${r.yds} yds${tds(r.td)}`);
+      add("Receiving", t.receiving, r => `${who(r)} ${r.rec} for ${r.yds}${tds(r.td)}`);
+      add("Kicking", t.kicking.filter(r => r.fga || r.pata), r => {
+        const parts = [];
+        if (r.fga) parts.push(`FG ${r.fgm}-${r.fga}${r.fgLong ? " (long " + r.fgLong + ")" : ""}`);
+        if (r.pata) parts.push(`PAT ${r.patm}-${r.pata}`);
+        return `${who(r)} ${parts.join(", ")}`;
+      });
+      add("Punting", t.punting, r => `${who(r)} ${r.no} for ${r.yds}${r.no ? " (" + (r.yds / r.no).toFixed(1) + " avg)" : ""}`);
+      add("Kick returns", t.kickReturns, r => `${who(r)} ${r.no} for ${r.yds}${tds(r.td)}`);
+      add("Punt returns", t.puntReturns, r => `${who(r)} ${r.no} for ${r.yds}${tds(r.td)}`);
+      add("Defense", t.defense, r => {
+        const parts = [];
+        if (r.int) parts.push(`${r.int} INT${r.intYds ? " (" + r.intYds + " yds)" : ""}`);
+        if (r.fr) parts.push(`${r.fr} fumble rec`);
+        if (r.td) parts.push(`${r.td} TD`);
+        return `${who(r)} ${parts.join(", ")}`;
+      });
+      if (lines.length) { out.push(""); out.push(t.name); lines.forEach(l => out.push(l)); }
+    }
+    return out.join("\n");
+  }
+
+  return { aggregate, leader, scoreLine, toText, gameDate, clockStr, isFinal };
+})();
+
+
+
+</script>
+
+<script>
+/* ============================================================
+   PHASE 2 — live entry UI (RUN and PASS only)
+   Everything else routes through a "not in this phase yet" note.
+   State lives in the engine's game object + localStorage.
+   ============================================================ */
+const E = FootballEngine;
+const STORE_KEY = "footballstats_game_v2";
+const app = document.getElementById("app");
+
+let game = null;
+let draft = null;   // { type, complete, yards, runner, passer, receiver, active }
+
+/* ---------- color helpers ----------
+   School colors can be very dark (navy) or near-white (gold). The true hex
+   shows in each team's color bar; text uses a legibility-adjusted version so
+   numbers stay readable against the dark stand. */
+function hexToRgb(hex) {
+  let h = (hex || "").replace("#", "").trim();
+  if (h.length === 3) h = h.split("").map(c => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return { r: parseInt(h.slice(0,2),16), g: parseInt(h.slice(2,4),16), b: parseInt(h.slice(4,6),16) };
+}
+function relLum({r,g,b}) {
+  const f = v => { v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); };
+  return 0.2126*f(r) + 0.7152*f(g) + 0.0722*f(b);
+}
+function readable(hex, fallback) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return fallback;
+  // brighten toward white until it clears the dark background comfortably
+  let { r, g, b } = rgb;
+  let guard = 0;
+  while (relLum({r,g,b}) < 0.35 && guard++ < 12) {
+    r = Math.round(r + (255-r)*0.22);
+    g = Math.round(g + (255-g)*0.22);
+    b = Math.round(b + (255-b)*0.22);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+/* School color choices. Stored on the team as a hex value, so older games
+   saved with a typed hex still load and display exactly as before. */
+const TEAM_COLORS = [
+  ["Red","#C8102E"], ["Maroon","#7A0019"], ["Orange","#F47A20"], ["Gold","#FFC72C"],
+  ["Green","#00843D"], ["Forest","#154734"], ["Teal","#007A78"],
+  ["Lt blue","#6CACE4"], ["Royal","#0050B5"], ["Navy","#0C2340"], ["Purple","#4B2E83"],
+  ["Black","#000000"], ["Gray","#8A8D8F"], ["White","#FFFFFF"]
+];
+const colorPick = { home: null, away: null };   // hex chosen in the open picker
+function colorPicker(side, current) {
+  const cur = current ? current.toUpperCase() : null;
+  colorPick[side] = cur;
+  const known = TEAM_COLORS.some(([, hex]) => hex === cur);
+  const list = (cur && !known ? [["Current", cur]] : []).concat(TEAM_COLORS);
+  return `<div class="swatches" data-side="${side}">${list.map(([name, hex]) =>
+    `<button type="button" class="sw ${hex === cur ? "sel" : ""}" data-swatch="${side}:${hex}"
+       aria-label="${name}" aria-pressed="${hex === cur}">
+       <span class="dot" style="background:${hex}"></span><span class="nm">${name}</span></button>`).join("")}</div>`;
+}
+function wireColorPickers() {
+  document.querySelectorAll("[data-swatch]").forEach(b => b.onclick = () => {
+    const [side, hex] = b.dataset.swatch.split(":");
+    colorPick[side] = colorPick[side] === hex ? null : hex;   // tap again to clear
+    document.querySelectorAll(`[data-swatch^="${side}:"]`).forEach(x => {
+      const on = x.dataset.swatch === side + ":" + colorPick[side];
+      x.classList.toggle("sel", on); x.setAttribute("aria-pressed", on);
+    });
+  });
+}
+function teamColor(side) { // side: 'home' | 'away'
+  const c = game.config[side === "home" ? "homeTeam" : "awayTeam"];
+  return c.color || (side === "home" ? "#3ddc84" : "#5b9dff");
+}
+
+/* ---------- persistence ---------- */
+// strip computed snapshots; they're derived on load
+function slimGame(g) {
+  return { config: g.config, nextId: g.nextId,
+    plays: g.plays.map(p => ({ id: p.id, timestamp: p.timestamp, gameClock: p.gameClock,
+      type: p.type, input: p.input, anchored: p.anchored, notes: p.notes, editHistory: p.editHistory })) };
+}
+function save() {
+  if (!game) return;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(slimGame(game))); } catch (e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return null;
+    const g = JSON.parse(raw);
+    E.reduceGame(g);   // rebuild computed snapshots
+    return g;
+  } catch (e) { return null; }
+}
+
+/* ---------- game clock: scoring plays and timeouts ----------
+   Time is typed register-style on the pad: 3, 4, 2 -> 0:03, 0:34, 3:42.
+   The draft holds those digits (342); the play stores seconds left
+   in input.clock. The engine never reads it, so it can't move the ball. */
+function qlenSecs() {
+  const m = /^(\d+):(\d\d)$/.exec((game && game.config.quarterLength) || "12:00");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 720;
+}
+const clockDigitsToSecs = n => Math.floor(n / 100) * 60 + (n % 100);
+const secsToClockDigits = t => Math.floor(t / 60) * 100 + (t % 60);
+function fmtClock(secs) {
+  if (secs === null || secs === undefined) return null;
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+}
+function clockValid(n) {
+  if (n === null || n === undefined) return true;
+  return n % 100 < 60 && clockDigitsToSecs(n) <= qlenSecs();
+}
+const quarterLabel = q => typeof q === "number" ? "Q" + q : "OT";
+
+/* NFHS: 3 timeouts per team per half, 1 per overtime */
+const halfOf = q => q === 1 || q === 2 ? 1 : q === 3 || q === 4 ? 2 : "OT";
+function timeoutsUsed(abbr, quarter) {
+  const half = halfOf(quarter);
+  return game.plays.filter(p => p.type === "TIMEOUT" && p.input.team === abbr &&
+    p.computed && halfOf(p.computed.quarter) === half).length;
+}
+function timeoutsLeft(abbr, quarter) {
+  const limit = halfOf(quarter) === "OT" ? 1 : 3;
+  return Math.max(0, limit - timeoutsUsed(abbr, quarter));
+}
+function timeoutDots(abbr, quarter) {
+  const limit = halfOf(quarter) === "OT" ? 1 : 3;
+  const left = timeoutsLeft(abbr, quarter);
+  let html = "";
+  for (let i = 0; i < limit; i++) html += `<i class="${i < left ? "on" : ""}"></i>`;
+  return `<span class="tos" aria-label="${left} timeout${left === 1 ? "" : "s"} left">${html}</span>`;
+}
+
+/* does the play in the panel put points on the board? (tries excluded) */
+function draftIsScoring() {
+  const d = draft;
+  if (!d || d.type === "TRY" || d.type === "TIMEOUT") return false;
+  if (d.result === "TOUCHDOWN" || d.result === "SAFETY") return true;
+  if (d.type === "FG") return d.result === "GOOD";
+  if (editingId !== null) {
+    const p = game.plays.find(x => x.id === editingId);
+    const ev = (p && p.computed && p.computed.events) || [];
+    if (ev.includes("TOUCHDOWN") || ev.includes("SAFETY")) return true;
+  }
+  if (!draftReadyBase()) return false;
+  const cur = E.getState(game).score, ns = preview().score;
+  return Object.keys(ns).some(k => ns[k] !== cur[k]);
+}
+
+/* ---------- draft helpers ---------- */
+function newDraft(type, state) {
+  const s = state || E.getState(game);
+  switch (type) {
+    case "RUN":  return { type, yards: null, runner: null, active: "yards" };
+    case "PASS": return { type, complete: null, yards: null, passer: null, receiver: null, active: null };
+    case "KICKOFF": return { type, kickFrom: s.kickDefault, distance: null, returnYards: null,
+                             result: "RETURNED", kicker: null, returner: null, active: "distance",
+                             freeKick: s.phase === "FREE_KICK" };
+    case "PUNT": return { type, distance: null, returnYards: null, result: "RETURNED",
+                          punter: null, returner: null, recTeam: null, spotSide: "own", spotYard: null,
+                          active: "distance" };
+    case "FG":   return { type, result: null, kicker: null, active: "kicker" };
+    case "PENALTY": return { type, team: null, yards: null, accepted: true, autoFD: false,
+                             player: null, confirmDown: null, confirmToGo: null,
+                             confirmSide: "own", confirmYard: null, active: "yards" };
+    case "TURNOVER": return { type, ttype: null, result: "RECOVERED", spotSide: "own", spotYard: null,
+                              returnYards: null, thrownBy: null, lostBy: null, recoveredBy: null,
+                              active: "spotYard" };
+    case "TRY":  return { type, tryType: null, result: null, kicker: null, runner: null,
+                          passer: null, receiver: null, active: null };
+    case "KNEEL": return { type, player: null, active: "player" };
+    case "TIMEOUT": return { type, team: null, clock: null, active: "clock" };
+    default: return { type };
+  }
+}
+
+function draftReady() {
+  if (!draft) return false;
+  if (!clockValid(draft.clock)) return false;
+  return draftReadyBase();
+}
+function draftReadyBase() {
+  if (!draft) return false;
+  const d = draft;
+  switch (d.type) {
+    case "RUN":  return d.yards !== null;
+    case "PASS":
+      if (d.complete === false) return true;
+      if (d.complete === true) return d.yards !== null;
+      return false;
+    case "KICKOFF":
+      if (d.result === "TOUCHBACK" || d.result === "TOUCHDOWN") return true;
+      return d.distance !== null;
+    case "PUNT":
+      if (d.result === "TOUCHBACK" || d.result === "TOUCHDOWN") return true;
+      if (d.result === "MUFFED") return d.recTeam !== null && d.spotYard !== null;
+      return d.distance !== null;
+    case "FG":   return d.result !== null;
+    case "PENALTY":
+      if (d.team === null || d.yards === null) return false;
+      if (!d.accepted) return true;
+      return d.confirmDown !== null && d.confirmToGo !== null && d.confirmYard !== null;
+    case "TURNOVER":
+      if (d.ttype === null) return false;
+      if (d.result === "TOUCHBACK" || d.result === "TOUCHDOWN") return true;
+      return d.spotYard !== null;
+    case "TRY":  return d.tryType !== null && d.result !== null;
+    case "KNEEL": return true;
+    case "TIMEOUT": return d.team !== null;
+    default: return false;
+  }
+}
+
+/* compute what saving the current draft would produce, without committing */
+function preview() {
+  if (!draftReadyBase()) return null;
+  const probe = JSON.parse(JSON.stringify({ config: game.config, nextId: game.nextId,
+    plays: game.plays.map(p => ({ id:p.id, type:p.type, input:p.input, anchored:p.anchored, editHistory:[], timestamp:0, gameClock:null, notes:null })) }));
+  E.applyPlay(probe, engineType(draft.type), draftToInput(), { timestamp: 0 });
+  return E.reduceGame(probe).state;
+}
+function engineType(t) { return t === "FG" ? "FIELD_GOAL" : t; }
+function sideToPos(side, yard) { return side === "own" ? yard : 100 - yard; }
+
+function draftToInput() {
+  const inp = draftToInputBase();
+  if (inp && draft.clock !== null && draft.clock !== undefined) inp.clock = clockDigitsToSecs(draft.clock);
+  return inp;
+}
+function draftToInputBase() {
+  const d = draft;
+  switch (d.type) {
+    case "RUN":  return { runner: d.runner, yards: d.yards || 0 };
+    case "PASS":
+      return d.complete
+        ? { complete: true, passer: d.passer, receiver: d.receiver, yards: d.yards || 0 }
+        : { complete: false, passer: d.passer };
+    case "KICKOFF":
+      return { kickFrom: d.kickFrom, distance: d.distance || 0, returnYards: d.returnYards || 0,
+               result: d.result, kicker: d.kicker, returner: d.returner };
+    case "PUNT": {
+      const inp = { distance: d.distance || 0, returnYards: d.returnYards || 0, result: d.result,
+                    punter: d.punter, returner: d.returner };
+      if (d.result === "MUFFED") { inp.recoveredByTeam = d.recTeam; inp.finalSpot = sideToPos(d.spotSide, d.spotYard); }
+      return inp;
+    }
+    case "FG":   return { result: d.result, kicker: d.kicker };
+    case "PENALTY": {
+      const inp = { team: d.team, yards: d.yards, accepted: d.accepted,
+                    automaticFirstDown: d.autoFD, player: d.player };
+      if (d.accepted) inp.confirm = { down: d.confirmDown, toGo: d.confirmToGo,
+                                      ballOn: sideToPos(d.confirmSide, d.confirmYard) };
+      return inp;
+    }
+    case "TURNOVER": {
+      const inp = { turnoverType: d.ttype, result: d.result, returnYards: d.returnYards || 0,
+                    thrownBy: d.thrownBy, lostBy: d.lostBy, recoveredBy: d.recoveredBy };
+      if (d.result !== "TOUCHBACK" && d.result !== "TOUCHDOWN")
+        inp.finalSpot = sideToPos(d.spotSide, d.spotYard);
+      return inp;
+    }
+    case "TRY":  return { tryType: d.tryType, result: d.result, kicker: d.kicker,
+                          runner: d.runner, passer: d.passer, receiver: d.receiver };
+    case "KNEEL": return { player: d.player, yards: 0 };
+    case "TIMEOUT": return { team: d.team };
+  }
+}
+
+/* ---------- actions ---------- */
+function pickType(type) {
+  if (type === "MORE") { openMore(); return; }
+  draft = (draft && draft.type === type) ? null : newDraft(type);
+  render();
+}
+function setComplete(v) {
+  draft.complete = v;
+  draft.active = v ? "yards" : null;
+  if (!v) { draft.yards = null; draft.receiver = null; }
+  render();
+}
+function focusField(f) { draft.active = f; render(); }
+function setChip(field, value) {
+  draft[field] = (draft[field] === value && field !== "result") ? null : value;
+  if (draft.type === "PENALTY" && (field === "team" || field === "autoFD" || field === "accepted"))
+    prefillPenaltyConfirm();
+  if (draft.type === "TRY" && field === "tryType") {
+    draft.active = value === "KICK" ? "kicker" : value === "RUN" ? "runner" : "passer";
+  }
+  render();
+}
+
+/* fields that take a +/- sign on the pad */
+const SIGNED_FIELDS = { yards: true, returnYards: true };
+/* yard-line fields cap at 50 */
+const YARDLINE_FIELDS = { spotYard: true, confirmYard: true };
+
+function padPress(key) {
+  const f = draft.active;
+  if (!f) return;
+  if (key === "C") draft[f] = null;
+  else if (f === "clock") {
+    if (key === "+/-") return;
+    const cur = draft.clock || 0;
+    draft.clock = cur >= 1000 ? Number(key) : cur * 10 + Number(key);
+  }
+  else if (key === "+/-") {
+    if (SIGNED_FIELDS[f] && draft[f] !== null) draft[f] = -draft[f];
+  } else {
+    const cur = draft[f] === null || draft[f] === undefined ? 0 : draft[f];
+    const neg = cur < 0;
+    const cap = YARDLINE_FIELDS[f] ? 50 : 99;
+    let mag = Math.abs(cur) * 10 + Number(key);
+    if (mag > cap) mag = Number(key);
+    draft[f] = neg ? -mag : mag;
+  }
+  if (draft.type === "PENALTY" && f === "yards") prefillPenaltyConfirm();
+  render();
+}
+
+/* Prefill the penalty confirm with standard enforcement; user verifies vs refs. */
+function prefillPenaltyConfirm() {
+  if (editingId !== null) return;   // editing: confirm values come from the record
+  const d = draft;
+  if (d.team === null || d.yards === null || !d.accepted) return;
+  const s = E.getState(game);
+  const onDefense = d.team !== s.possession;
+  let newBall = onDefense ? s.ballOn + d.yards : s.ballOn - d.yards;
+  newBall = Math.max(1, Math.min(99, newBall));
+  let down, toGo;
+  if (onDefense && d.autoFD) { down = 1; toGo = 10; }
+  else if (onDefense) { down = s.down; toGo = Math.max(1, (s.goalToGo ? 100 : s.firstDownAt) - newBall); }
+  else { down = s.down; toGo = Math.max(1, (s.goalToGo ? 100 : s.firstDownAt) - newBall); } // replay down
+  if (newBall + toGo > 100) toGo = 100 - newBall;
+  d.confirmDown = down;
+  d.confirmToGo = toGo;
+  d.confirmSide = newBall <= 50 ? "own" : "opp";
+  d.confirmYard = newBall <= 50 ? newBall : 100 - newBall;
+}
+
+function commit() {
+  if (!draftReady()) return;
+  if (draft.type === "TIMEOUT") {
+    const q = E.getState(game).quarter;
+    if (timeoutsLeft(draft.team, q) === 0 &&
+        !confirm(`${draft.team} has no timeouts left ${halfOf(q) === "OT" ? "this overtime" : "this half"}. Record it anyway?`)) return;
+  }
+  E.applyPlay(game, engineType(draft.type), draftToInput());
+  draft = null;
+  save();
+  render();
+}
+/* ---------- Phase 4: screens, play log, corrections ---------- */
+let screen = "live";            // live | log | edit | stats
+let logReturn = "live";         // where Back from the log goes
+let editingId = null;
+let editReturn = "live";        // where Back from edit goes
+let soonMsg = null;             // transient banner text
+
+function editLast() {
+  const last = game.plays[game.plays.length - 1];
+  if (last) openEdit(last.id, "live");
+}
+function undoLast() {
+  if (!game.plays.length) return;
+  const gone = game.plays[game.plays.length - 1];
+  if (!confirm("Undo this play?\n\n" + playSummary(gone, game.config))) return;
+  game.plays.pop();
+  E.reduceGame(game);
+  draft = null;
+  save();
+  render();
+}
+
+function openLog(from) { logReturn = from === "stats" ? "stats" : "live"; screen = "log"; draft = null; render(); }
+function closeLog() { screen = logReturn; logReturn = "live"; render(); }
+function openEdit(playId, from, focus) {
+  const p = game.plays.find(x => x.id === playId);
+  if (!p) return;
+  editingId = playId;
+  editReturn = from || "log";
+  draft = draftFromPlay(p);
+  if (focus) draft.active = focus;
+  screen = "edit";
+  render();
+}
+function closeEdit() {
+  editingId = null;
+  draft = null;
+  screen = editReturn;
+  render();
+}
+
+/* rebuild a draft from a stored play so the entry panel can edit it */
+function posToSide(pos) { return pos <= 50 ? { side:"own", yard:pos } : { side:"opp", yard:100-pos }; }
+function draftFromPlay(p) {
+  const d = draftFromPlayBase(p);
+  d.clock = (p.input && p.input.clock != null) ? secsToClockDigits(p.input.clock) : null;
+  if (p.type === "TIMEOUT") d.active = "clock";
+  return d;
+}
+function draftFromPlayBase(p) {
+  const inp = p.input, cm = p.computed;
+  switch (p.type) {
+    case "RUN":  return { type:"RUN", yards: inp.yards ?? null, runner: inp.runner ?? null, active:"yards" };
+    case "PASS": return { type:"PASS", complete: !!inp.complete, yards: inp.yards ?? null,
+                          passer: inp.passer ?? null, receiver: inp.receiver ?? null, active: inp.complete?"yards":null };
+    case "KICKOFF": return { type:"KICKOFF", kickFrom: inp.kickFrom ?? 40, distance: inp.distance ?? null,
+                             returnYards: inp.returnYards ?? null, result: inp.result || "RETURNED",
+                             kicker: inp.kicker ?? null, returner: inp.returner ?? null, active:"distance",
+                             freeKick: cm && cm.phase === "FREE_KICK" };
+    case "PUNT": {
+      const d = { type:"PUNT", distance: inp.distance ?? null, returnYards: inp.returnYards ?? null,
+                  result: inp.result || "RETURNED", punter: inp.punter ?? null, returner: inp.returner ?? null,
+                  recTeam: inp.recoveredByTeam ?? null, spotSide:"own", spotYard:null, active:"distance" };
+      if (inp.finalSpot != null) { const s = posToSide(inp.finalSpot); d.spotSide = s.side; d.spotYard = s.yard; }
+      return d;
+    }
+    case "FIELD_GOAL": return { type:"FG", result: inp.result || null, kicker: inp.kicker ?? null, active:"kicker" };
+    case "PENALTY": {
+      const d = { type:"PENALTY", team: inp.team ?? null, yards: inp.yards ?? null,
+                  accepted: inp.accepted !== false, autoFD: !!inp.automaticFirstDown,
+                  player: inp.player ?? null, confirmDown: null, confirmToGo: null,
+                  confirmSide:"own", confirmYard: null, active:"yards" };
+      if (inp.confirm) {
+        d.confirmDown = inp.confirm.down; d.confirmToGo = inp.confirm.toGo;
+        const s = posToSide(inp.confirm.ballOn); d.confirmSide = s.side; d.confirmYard = s.yard;
+      }
+      return d;
+    }
+    case "TURNOVER": {
+      const d = { type:"TURNOVER", ttype: inp.turnoverType || null, result: inp.result || "RECOVERED",
+                  spotSide:"own", spotYard:null, returnYards: inp.returnYards ?? null,
+                  thrownBy: inp.thrownBy ?? null, lostBy: inp.lostBy ?? null,
+                  recoveredBy: inp.recoveredBy ?? null, active:"spotYard" };
+      if (inp.finalSpot != null) { const s = posToSide(inp.finalSpot); d.spotSide = s.side; d.spotYard = s.yard; }
+      return d;
+    }
+    case "TRY":  return { type:"TRY", tryType: inp.tryType || null, result: inp.result || null,
+                          kicker: inp.kicker ?? null, runner: inp.runner ?? null,
+                          passer: inp.passer ?? null, receiver: inp.receiver ?? null, active:null };
+    case "KNEEL": return { type:"KNEEL", player: inp.player ?? null, active:"player" };
+    case "TIMEOUT": return { type:"TIMEOUT", team: inp.team ?? null };
+    default: return { type: p.type, uneditable: true };
+  }
+}
+
+/* the state as it stood when this play was snapped (for panel context) */
+function pseudoStateFor(p) {
+  const cm = p.computed || {};
+  return { phase: cm.phase || "PLAY", possession: cm.possession, ballOn: cm.ballOnBefore || 0,
+           down: cm.down || 1, goalToGo: false, firstDownAt: 100,
+           kickDefault: p.input.kickFrom != null ? p.input.kickFrom : 40,
+           score: E.getState(game).score, quarter: cm.quarter };
+}
+
+/* Save an edit: preview the cascade; commit silently if nothing else moves. */
+function onEditSave() {
+  if (!draftReady()) return;
+  const p = game.plays.find(x => x.id === editingId);
+  const newInput = draftToInput();
+  if (p.type === "RUN" || p.type === "PASS" || p.type === "KNEEL") newInput.result = null; // re-derive TD/safety
+  const baseConflicts = E.reduceGame(game).conflicts.map(c => c.playId + ":" + c.type);
+  const pv = E.previewEdit(game, editingId, newInput);
+  const conflicts = pv.conflicts.filter(c =>
+    !(c.playId === editingId && (c.type === "TD_NOT_RECORDED" )) &&
+    !baseConflicts.includes(c.playId + ":" + c.type));
+  const others = pv.changes.filter(ch => ch.playId !== editingId);
+  if (!conflicts.length && !others.length) { doCommitEdit(newInput); return; }
+  openCascadeSheet(pv, conflicts, others, newInput);
+}
+function doCommitEdit(newInput) {
+  E.commitEdit(game, editingId, newInput);
+  const p = game.plays.find(x => x.id === editingId);
+  if (p.type === "RUN" || p.type === "PASS" || p.type === "KNEEL") {   // re-freeze derived result
+    const ev = (p.computed && p.computed.events) || [];
+    if (ev.includes("TOUCHDOWN")) p.input.result = "TOUCHDOWN";
+    else if (ev.includes("SAFETY")) p.input.result = "SAFETY";
+    else p.input.result = null;
+    E.reduceGame(game);
+  }
+  save();
+  closeSheet();
+  closeEdit();
+}
+function openCascadeSheet(pv, conflicts, others, newInput) {
+  const c = game.config;
+  const conflictHtml = conflicts.map(cf =>
+    `<div class="cascade conflict">⚠ Play ${cf.playId}: ${cf.message}</div>`).join("");
+  const changeHtml = others.map(ch => {
+    const b = E.displayYardLine(ch.before.ballOnAfter, ch.before.possessionAfter, c);
+    const a = E.displayYardLine(ch.after.ballOnAfter, ch.after.possessionAfter, c);
+    const held = ch.anchorHeld ? ' <span class="held">— confirmed spot holds, cascade stops</span>' : '';
+    return `<div class="cascade">Play ${ch.playId}: ${b} → ${a}${held}</div>`;
+  }).join("");
+  openSheet(`
+    <h3>This change recalculates ${others.length} later play${others.length===1?'':'s'}</h3>
+    ${conflictHtml}
+    ${changeHtml || '<div class="cascade">No downstream position changes.</div>'}
+    ${conflicts.length ? '<div class="cascade" style="color:var(--dim);">Conflicts mean a recorded result no longer matches the math — fix the flagged play after confirming, or cancel and re-check this edit.</div>' : ''}
+    <button class="sel" id="cascadeGo" style="text-align:center;">Confirm change</button>
+    <button class="cancel" id="cascadeNo">Cancel</button>
+  `);
+  document.getElementById("cascadeGo").onclick = () => doCommitEdit(newInput);
+  document.getElementById("cascadeNo").onclick = closeSheet;
+}
+function onDeletePlay() {
+  const p = game.plays.find(x => x.id === editingId);
+  if (!p) return;
+  const idx = game.plays.indexOf(p);
+  const laterCount = game.plays.length - idx - 1;
+  const warn = laterCount ? `\n\n${laterCount} later play${laterCount===1?'':'s'} will recalculate (anchors bound the ripple).` : "";
+  if (!confirm("Delete this play?\n\n" + playSummary(p, game.config) + warn)) return;
+  game.plays.splice(idx, 1);
+  E.reduceGame(game);
+  save();
+  closeEdit();
+}
+function openMore() {
+  openSheet(`
+    <h3>More plays</h3>
+    <button id="moKneel">Kneel</button>
+    <button id="moTimeout">Timeout</button>
+    <button id="moTurnover">Turnover (fumble lost / INT)</button>
+    <button id="moQtr">${endQuarterLabel(E.getState(game).quarter)}</button>
+    <button class="cancel" id="moCancel">Cancel</button>
+  `);
+  document.getElementById("moKneel").onclick = () => { draft = newDraft("KNEEL"); closeSheet(); render(); };
+  document.getElementById("moTimeout").onclick = () => { draft = newDraft("TIMEOUT"); closeSheet(); render(); };
+  document.getElementById("moTurnover").onclick = () => { draft = newDraft("TURNOVER"); closeSheet(); render(); };
+  document.getElementById("moQtr").onclick = endQuarterFlow;
+  document.getElementById("moCancel").onclick = closeSheet;
+}
+
+function renderGameOver(state, c) {
+  const H = c.homeTeam.abbr, A = c.awayTeam.abbr;
+  const homeCol = readable(teamColor("home"), "#3ddc84"), awayCol = readable(teamColor("away"), "#5b9dff");
+  const h = state.score[H], a = state.score[A];
+  const result = h === a ? "Tie game" : `${esc(h > a ? c.homeTeam.name : c.awayTeam.name)} win`;
+  app.innerHTML = `
+    <div class="board">
+      <div class="team"><span class="abbr" style="color:${homeCol}">${esc(H)}</span><span class="pts">${h}</span></div>
+      <div class="meta"><span>Final</span><button class="menubtn" id="menuBtn" aria-label="Menu">⋯</button></div>
+      <div class="team"><span class="pts">${a}</span><span class="abbr" style="color:${awayCol}">${esc(A)}</span></div>
+    </div>
+    <div class="sit"><div class="dd">Final</div><div class="spot">${result}, ${Math.max(h, a)}–${Math.min(h, a)}</div></div>
+    <div class="scroll">
+      <button class="save" id="goStats"><span>Stats & email box score</span><span class="preview">PDF, text or backup file</span></button>
+      <button class="resume" id="goLog">Play log</button>
+      <button class="resume" id="reopen">Undo end of game</button>
+    </div>
+    ${renderLast(c)}`;
+  document.getElementById("goStats").onclick = openStats;
+  document.getElementById("menuBtn").onclick = openMenu;
+  document.getElementById("goLog").onclick = () => openLog("live");
+  document.getElementById("reopen").onclick = () => {
+    if (!confirm("Reopen the game? This removes the end-of-game entry so you can keep entering plays.")) return;
+    game.plays.pop(); E.reduceGame(game); save(); render();
+  };
+  const lt = document.getElementById("lastTxt"); if (lt) lt.onclick = () => openLog("live");
+  const ub = document.getElementById("undoBtn"); if (ub) ub.onclick = undoLast;
+  const eb = document.getElementById("editBtn"); if (eb) eb.style.display = "none";
+}
+function endQuarterLabel(q) {
+  return q === 2 ? "End half" : q === 4 ? "End regulation" : q === "OT" ? "End overtime" : "End quarter";
+}
+function finishQuarter(input) {
+  E.endQuarter(game, input);
+  draft = null; save(); closeSheet();
+  if (FootballStats.aggregate(game).status === "Final") { openStats(); return; }
+  render();
+}
+function endQuarterFlow() {
+  const s = E.getState(game), c = game.config;
+  if (s.phase === "TRY") {
+    alert("Enter the try first. It's still played when time runs out on the touchdown.");
+    closeSheet();
+    return;
+  }
+  if (s.quarter === 4 || s.quarter === "OT") {
+    const H = c.homeTeam.abbr, A = c.awayTeam.abbr;
+    if (s.score[H] !== s.score[A]) { finishQuarter({}); return; }     // someone's ahead: Final
+    const when = s.quarter === 4 ? "after regulation" : "after this overtime";
+    openSheet(`
+      <h3>Tied ${s.score[H]}–${s.score[A]} ${when}</h3>
+      <button class="sel" id="otGo" style="text-align:center;">${s.quarter === 4 ? "Start overtime" : "Another overtime"}</button>
+      <button id="otTie" style="text-align:center;">End game as a tie</button>
+      <button class="cancel" id="otCancel">Cancel</button>
+    `);
+    document.getElementById("otGo").onclick = () => { finishQuarter({}); openSetSpot(); };
+    document.getElementById("otTie").onclick = () => finishQuarter({ final: true });
+    document.getElementById("otCancel").onclick = closeSheet;
+    return;
+  }
+  if (s.quarter !== 2) { finishQuarter({}); return; }
+  // Halftime: whoever received the opening kickoff kicks to start the second half.
+  const H = c.homeTeam.abbr, A = c.awayTeam.abbr;
+  const usual = E.otherTeam(c.whoKicksOff, c);
+  const btn = ab => `<button class="${ab === usual ? "sel" : ""}" data-htkick="${esc(ab)}" style="text-align:center;">
+      ${esc(ab === H ? c.homeTeam.name : c.awayTeam.name)} kicks off${ab === usual ? " (usual)" : ""}</button>`;
+  openSheet(`
+    <h3>Halftime</h3>
+    <div class="cascade" style="border:none;color:var(--dim);">Who kicks off to start the second half?</div>
+    ${btn(usual)}${btn(E.otherTeam(usual, c))}
+    <button class="cancel" id="htCancel">Cancel</button>
+  `);
+  document.querySelectorAll("[data-htkick]").forEach(b =>
+    b.onclick = () => finishQuarter({ halftimeKicker: b.dataset.htkick }));
+  document.getElementById("htCancel").onclick = closeSheet;
+}
+
+function startGame(cfg) {
+  game = E.createGame(cfg);
+  draft = null;
+  save();
+  render();
+}
+function resetGame() {
+  if (!confirm("Start a new game? The current game will be cleared.")) return;
+  localStorage.removeItem(STORE_KEY);
+  game = null; draft = null;
+  closeSheet();
+  render();
+}
+
+/* ---------- menu sheet ---------- */
+let sheetEl = null;
+function closeSheet() { if (sheetEl) { sheetEl.remove(); sheetEl = null; } }
+function openSheet(html) {
+  closeSheet();
+  sheetEl = document.createElement("div");
+  sheetEl.className = "sheet-bg";
+  sheetEl.innerHTML = `<div class="sheet">${html}</div>`;
+  sheetEl.onclick = (e) => { if (e.target === sheetEl) closeSheet(); };
+  document.body.appendChild(sheetEl);
+}
+function openMenu() {
+  openSheet(`
+    <h3>Game menu</h3>
+    <button id="mStats">Stats</button>
+    <button id="mLog">Play log</button>
+    <button id="mEdit">Edit teams &amp; colors</button>
+    ${FootballStats.isFinal(game) ? "" : `<button id="mQtr">${endQuarterLabel(E.getState(game).quarter)}</button>`}
+    <button id="mSpot">Set ball spot (start a drive)</button>
+    <button class="danger" id="mNew">New game (clear this one)</button>
+    <button class="cancel" id="mCancel">Cancel</button>
+  `);
+  document.getElementById("mStats").onclick = () => { closeSheet(); openStats(); };
+  document.getElementById("mLog").onclick = () => { closeSheet(); openLog("live"); };
+  document.getElementById("mEdit").onclick = openEditTeams;
+  document.getElementById("mSpot").onclick = openSetSpot;
+  const mq = document.getElementById("mQtr"); if (mq) mq.onclick = endQuarterFlow;
+  document.getElementById("mNew").onclick = resetGame;
+  document.getElementById("mCancel").onclick = closeSheet;
+}
+function openEditTeams() {
+  const c = game.config;
+  openSheet(`
+    <h3>Edit teams</h3>
+    <label style="font-size:12px;color:var(--dim);">Home team</label>
+    <div class="ss-fields">
+      <input class="numin" id="etHomeName" value="${esc(c.homeTeam.name)}" style="text-align:left;">
+    </div>
+    ${colorPicker("home", c.homeTeam.color)}
+    <label style="font-size:12px;color:var(--dim);">Away team</label>
+    <div class="ss-fields">
+      <input class="numin" id="etAwayName" value="${esc(c.awayTeam.name)}" style="text-align:left;">
+    </div>
+    ${colorPicker("away", c.awayTeam.color)}
+    <button class="sel" id="etSave" style="text-align:center;">Save changes</button>
+    <button class="cancel" id="etCancel">Cancel</button>
+  `);
+  document.getElementById("etSave").onclick = () => {
+    const hn = document.getElementById("etHomeName").value.trim();
+    const an = document.getElementById("etAwayName").value.trim();
+    if (hn) { game.config.homeTeam.name = hn; game.config.homeTeam.abbr = E.autoAbbr(hn); }
+    if (an) { game.config.awayTeam.name = an; game.config.awayTeam.abbr = E.autoAbbr(an); }
+    game.config.homeTeam.color = colorPick.home;
+    game.config.awayTeam.color = colorPick.away;
+    if (game.config.homeTeam.abbr === game.config.awayTeam.abbr)
+      game.config.awayTeam.abbr = game.config.awayTeam.abbr.slice(0,2)+"2";
+    save(); closeSheet(); render();
+  };
+  document.getElementById("etCancel").onclick = openMenu;
+  wireColorPickers();
+}
+function openSetSpot() {
+  const c = game.config;
+  openSheet(`
+    <h3>Set the ball spot</h3>
+    <label style="font-size:12px;color:var(--dim);">Who has the ball?</label>
+    <div class="ss-fields">
+      <select id="ssTeam">
+        <option value="${c.homeTeam.abbr}">${c.homeTeam.name}</option>
+        <option value="${c.awayTeam.abbr}">${c.awayTeam.name}</option>
+      </select>
+    </div>
+    <label style="font-size:12px;color:var(--dim);">Ball on (their side + yard line)</label>
+    <div class="ss-fields">
+      <select id="ssSide">
+        <option value="own">Own</option>
+        <option value="opp">Opponent</option>
+      </select>
+      <input class="numin" id="ssYard" inputmode="numeric" placeholder="25">
+    </div>
+    <label style="font-size:12px;color:var(--dim);">Down &amp; distance</label>
+    <div class="ss-fields">
+      <select id="ssDown"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+      <input class="numin" id="ssToGo" inputmode="numeric" placeholder="10">
+    </div>
+    <button class="sel" id="ssGo" style="text-align:center;">Start here</button>
+    <button class="cancel" id="ssCancel">Cancel</button>
+  `);
+  document.getElementById("ssGo").onclick = () => {
+    const team = document.getElementById("ssTeam").value;
+    const side = document.getElementById("ssSide").value;
+    const yard = parseInt(document.getElementById("ssYard").value || "25", 10);
+    const down = parseInt(document.getElementById("ssDown").value || "1", 10);
+    const toGoRaw = document.getElementById("ssToGo").value;
+    const toGo = toGoRaw === "" ? null : parseInt(toGoRaw, 10);
+    // own X -> position X; opponent X -> position 100-X
+    const ballOn = side === "own" ? yard : (100 - yard);
+    E.applyPlay(game, "SET_SPOT", { possession: team, ballOn, down, toGo });
+    draft = null; save(); closeSheet(); render();
+  };
+  document.getElementById("ssCancel").onclick = openMenu;
+}
+
+/* ---------- rendering ---------- */
+/* Every tap re-renders the screen. Keep the scroll position across renders
+   (it used to snap back to the top on each digit), and when an entry panel
+   opens or grows, scroll just enough to show the active field through the
+   Save button. */
+let lastRender = { screen: null, draft: null, gameStarted: false };
+const screenScroll = {};
+function render() {
+  const before = document.querySelector("#app .scroll");
+  const prevTop = before ? before.scrollTop : 0;
+  const prev = lastRender;
+  renderScreen();
+  lastRender = { screen: game ? screen : "setup", draft, gameStarted: !!game };
+  const sc = document.querySelector("#app .scroll");
+  if (!sc) return;
+  const sameScreen = prev.screen === lastRender.screen;
+  if (!sameScreen && prev.screen) screenScroll[prev.screen] = prevTop;
+  // back to the log or stats after an edit: land where you left off
+  sc.scrollTop = sameScreen ? prevTop
+    : (lastRender.screen === "log" || lastRender.screen === "stats") ? (screenScroll[lastRender.screen] || 0) : 0;
+  if (lastRender.screen !== "live" && lastRender.screen !== "edit") return;
+  if (!draft) { if (prev.draft && lastRender.screen === "live") sc.scrollTop = 0; return; }
+  const panel = sc.querySelector(".panel:not(.hidden)");
+  if (!panel) return;
+  const newPanel = !sameScreen || prev.draft !== draft;
+  const act = draft.active && sc.querySelector(`[data-focus="${draft.active}"]`);
+  // a fresh panel shows its title when everything fits; otherwise the field being typed wins
+  const actTop = act ? act.closest(".field") || act : null;
+  const top = newPanel && (!actTop || fits(sc, panel, sc.querySelector("#saveBtn, #editSaveBtn") || panel)) ? panel : (actTop || panel);
+  const bottom = sc.querySelector("#saveBtn, #editSaveBtn") || panel;
+  keepInView(sc, top, bottom);
+}
+function fits(sc, topEl, bottomEl) {
+  return bottomEl.getBoundingClientRect().bottom - topEl.getBoundingClientRect().top + 20 <= sc.clientHeight;
+}
+function keepInView(sc, topEl, bottomEl) {
+  const cr = sc.getBoundingClientRect();
+  const top = topEl.getBoundingClientRect().top - cr.top + sc.scrollTop - 10;
+  const bottom = bottomEl.getBoundingClientRect().bottom - cr.top + sc.scrollTop + 10;
+  let st = sc.scrollTop;
+  if (bottom - st > sc.clientHeight) st = bottom - sc.clientHeight;   // bring Save up
+  if (top < st) st = top;                                             // but never hide the field being typed
+  sc.scrollTop = Math.max(0, st);
+}
+function renderScreen() {
+  if (!game) { renderSetup(); return; }
+  if (screen === "log") { renderLog(); return; }
+  if (screen === "edit") { renderEdit(); return; }
+  if (screen === "stats") { renderStats(); return; }
+  const state = E.getState(game);
+  const c = game.config;
+  if (FootballStats.isFinal(game, state)) { draft = null; renderGameOver(state, c); return; }
+
+  // Special phases take over: the correct panel auto-opens.
+  if ((state.phase === "KICKOFF" || state.phase === "FREE_KICK") &&
+      (!draft || draft.type !== "KICKOFF")) draft = newDraft("KICKOFF", state);
+  if (state.phase === "TRY" && (!draft || draft.type !== "TRY")) draft = newDraft("TRY", state);
+  if (state.phase === "PLAY" && draft &&
+      (draft.type === "KICKOFF" || draft.type === "TRY")) draft = null;
+
+  const inPlay = state.phase === "PLAY";
+  const homeHas = state.possession === c.homeTeam.abbr;
+  const awayHas = state.possession === c.awayTeam.abbr;
+  const homeCol = readable(teamColor("home"), "#3ddc84");
+  const awayCol = readable(teamColor("away"), "#5b9dff");
+
+  app.innerHTML = `
+    <div class="board">
+      <div class="team">
+        <span class="abbr-col"><span class="abbr" style="color:${homeCol}">${c.homeTeam.abbr}</span>${timeoutDots(c.homeTeam.abbr, state.quarter)}</span>
+        <span class="pts" ${homeHas?`style="color:${homeCol}"`:''}>${state.score[c.homeTeam.abbr]}</span>
+        ${homeHas?`<span class="poss-dot" style="background:${homeCol}"></span>`:''}
+      </div>
+      <div class="meta"><span>${quarterLabel(state.quarter)}</span><button class="menubtn" id="menuBtn" aria-label="Menu">⋯</button></div>
+      <div class="team">
+        ${awayHas?`<span class="poss-dot" style="background:${awayCol}"></span>`:''}
+        <span class="pts" ${awayHas?`style="color:${awayCol}"`:''}>${state.score[c.awayTeam.abbr]}</span>
+        <span class="abbr-col"><span class="abbr" style="color:${awayCol}">${c.awayTeam.abbr}</span>${timeoutDots(c.awayTeam.abbr, state.quarter)}</span>
+      </div>
+    </div>
+    <div class="colorbars">
+      <div class="cbar" style="background:${teamColor('home')};opacity:${homeHas?1:0.35}"></div>
+      <div class="cbar" style="background:${teamColor('away')};opacity:${awayHas?1:0.35}"></div>
+    </div>
+
+    <div class="sit">
+      ${renderSituation(state, c)}
+    </div>
+
+    <div class="scroll">
+      ${renderTypes(state)}
+      ${renderPanel(state, c)}
+      ${soonMsg ? `<div style="margin-top:14px;text-align:center;color:var(--flag);font-size:13px;">${soonMsg}</div>` : ''}
+    </div>
+
+    ${renderLast(c)}
+  `;
+  wire();
+}
+
+function renderSituation(state, c) {
+  if (state.phase === "PLAY") {
+    const target = state.goalToGo ? "goal" : E.toGo(state);
+    const ord = ["","1st","2nd","3rd","4th"][state.down];
+    const fdAt = state.goalToGo ? "goal line" : E.displayYardLine(state.firstDownAt, state.possession, c);
+    return `<div class="dd">${ord} & ${target}</div>
+            <div class="spot">ball on <b>${E.displayYardLine(state.ballOn, state.possession, c)}</b> · first down at ${fdAt}</div>`;
+  }
+  if (state.phase === "TRY") {
+    return `<div class="dd" style="font-size:24px;">Try — ${state.possession}</div>
+            <div class="spot">after the touchdown · kick +1 or run/pass +2</div>`;
+  }
+  const label = state.phase === "FREE_KICK" ? "Free kick" : "Kickoff";
+  return `<div class="dd" style="font-size:24px;">${label}</div>
+          <div class="spot"><b>${state.possession}</b> kicking from the ${state.kickDefault}</div>`;
+}
+
+/* ---------- play log screen ---------- */
+function buildDriveGroups() {
+  const groups = [];
+  let cur = null;
+  for (const p of game.plays) {
+    const cm = p.computed || {};
+    if (p.type === "QUARTER_END") { groups.push({ kind:"qtr", play:p }); cur = null; continue; }
+    if (p.type === "KICKOFF") { groups.push({ kind:"kick", play:p }); cur = null; continue; }
+    if (p.type === "TRY") {
+      const lastDrive = [...groups].reverse().find(g => g.kind === "drive");
+      if (lastDrive) lastDrive.plays.push(Object.assign({ _sub:true }, { p }));
+      else groups.push({ kind:"kick", play:p });
+      continue;
+    }
+    const team = cm.possession;
+    if (!cur || cur.team !== team) { cur = { kind:"drive", team, plays: [] }; groups.push(cur); }
+    cur.plays.push({ p });
+    const flipped = cm.possessionAfter !== team;
+    const scored = (cm.events||[]).some(e => e==="TOUCHDOWN"||e==="FIELD_GOAL_GOOD"||e==="SAFETY");
+    if (flipped || scored) cur = null;
+  }
+  return groups;
+}
+function driveStats(g) {
+  let yards = 0, count = 0, endLabel = "in progress";
+  for (const row of g.plays) {
+    const p = row.p || row;
+    if (!p || !p.computed) continue;
+    const cm = p.computed;
+    if (p.type !== "TIMEOUT" && p.type !== "TRY") count++;
+    if (cm.possessionAfter === g.team) yards += (cm.ballOnAfter - cm.ballOnBefore);
+    const ev = cm.events || [];
+    if (ev.includes("TOUCHDOWN")) endLabel = "Touchdown";
+    else if (ev.includes("FIELD_GOAL_GOOD")) endLabel = "Field goal";
+    else if (ev.includes("SAFETY")) endLabel = "Safety";
+    else if (ev.includes("TURNOVER_ON_DOWNS")) endLabel = "Turnover on downs";
+    else if (p.type === "PUNT") endLabel = "Punt";
+    else if (p.type === "TURNOVER") endLabel = p.input.turnoverType === "INTERCEPTION" ? "Interception" : "Fumble";
+  }
+  return { yards, count, endLabel };
+}
+function logRow(p, c, sub) {
+  const cm = p.computed || {};
+  const ev = cm.events || [];
+  const boxed = ev.includes("TOUCHDOWN") || ev.includes("FIELD_GOAL_GOOD") || ev.includes("SAFETY");
+  let prefix = "";
+  if (cm.phase === "PLAY" && cm.down) {
+    const ord = ["","1st","2nd","3rd","4th"][cm.down] || "";
+    const tg = cm.toGo === null || cm.toGo === undefined ? "" : " & " + cm.toGo;
+    prefix = `${ord}${tg} · ${E.displayYardLine(cm.ballOnBefore, cm.possession, c)} — `;
+  }
+  return `<div class="logrow ${boxed?'boxed':''} ${sub?'sub':''}" data-play="${p.id}">
+      ${prefix}${playSummary(p, c)}</div>`;
+}
+function renderLog() {
+  const c = game.config;
+  const groups = buildDriveGroups();
+  let rows = "";
+  for (const g of groups) {
+    if (g.kind === "qtr") { rows += `<div class="logqtr">${playSummary(g.play, c)}</div>`; continue; }
+    if (g.kind === "kick") { rows += logRow(g.play, c, false); continue; }
+    const st = driveStats(g);
+    const first = g.plays.find(r => r.p && r.p.computed);
+    const startAt = first ? E.displayYardLine(first.p.computed.ballOnBefore, g.team, c) : "";
+    rows += `<div class="loghead"><b>${g.team} drive</b> · ${st.count} play${st.count===1?'':'s'}, ${st.yards} yds · ${st.endLabel}${startAt?` <span>· from ${startAt}</span>`:''}</div>`;
+    for (const r of g.plays) rows += logRow(r.p, c, !!r._sub || (r.p && r.p.type==="TRY"));
+  }
+  app.innerHTML = `
+    <div class="board">
+      <button class="edit" id="logBack">${logReturn === "stats" ? "← Stats" : "← Live"}</button>
+      <span style="font-size:15px;font-weight:600;">Play log</span>
+      <span class="meta">${game.plays.length} plays</span>
+    </div>
+    <div class="scroll" style="padding:8px 0 20px;">
+      ${rows || '<div class="logqtr">No plays yet</div>'}
+      <div class="logqtr" style="color:var(--dim);font-size:11px;">Tap any play to edit it</div>
+    </div>`;
+  document.getElementById("logBack").onclick = closeLog;
+  document.querySelectorAll("[data-play]").forEach(el =>
+    el.onclick = () => openEdit(Number(el.dataset.play), "log"));
+}
+
+/* ---------- edit screen ---------- */
+function renderEdit() {
+  const c = game.config;
+  const p = game.plays.find(x => x.id === editingId);
+  if (!p) { closeEdit(); return; }
+  const cm = p.computed || {};
+  const ps = pseudoStateFor(p);
+  const parts = draft.uneditable ? null : panelParts(ps, c);
+  const situ = cm.phase === "PLAY" && cm.down
+    ? `${["","1st","2nd","3rd","4th"][cm.down]} & ${cm.toGo ?? "—"} · ${E.displayYardLine(cm.ballOnBefore, cm.possession, c)}`
+    : (cm.phase || "");
+  const bodyHtml = parts
+    ? `<div class="panel"><h3>${parts.title}</h3>${parts.body}
+        <button class="save" id="editSaveBtn" ${draftReady()?'':'disabled'}>
+          <span>Save changes</span><span class="preview">recalculates forward if positions move</span></button>
+       </div>`
+    : `<div class="panel"><h3>${p.type}</h3>
+        <p style="color:var(--dim);font-size:13px;">This play type has no editable fields.</p></div>`;
+  app.innerHTML = `
+    <div class="board">
+      <button class="edit" id="editBack">← Back</button>
+      <span style="font-size:15px;font-weight:600;">Edit play ${p.id}</span>
+      <span class="meta">${situ}</span>
+    </div>
+    <div class="scroll">
+      ${bodyHtml}
+      <button class="delplay" id="delPlayBtn">Delete this play</button>
+    </div>`;
+  document.getElementById("editBack").onclick = closeEdit;
+  const sv = document.getElementById("editSaveBtn"); if (sv) sv.onclick = onEditSave;
+  document.getElementById("delPlayBtn").onclick = onDeletePlay;
+  wireDraftControls();
+}
+
+function renderTypes(state) {
+  if (state.phase !== "PLAY") return "";   // special phases: panel owns the screen
+  const fourth = state.down === 4;
+  const promo = fourth ? `<div class="promo">
+      <button class="${draft&&draft.type==='PUNT'?'sel':''}" data-type="PUNT">Punt</button>
+      <button class="${draft&&draft.type==='FG'?'sel':''}" data-type="FG">Field goal</button>
+    </div>` : "";
+  return `<div class="types">
+    ${promo}
+    <button class="big ${draft&&draft.type==='RUN'?'sel':''}" data-type="RUN">Run</button>
+    <button class="big ${draft&&draft.type==='PASS'?'sel':''}" data-type="PASS">Pass</button>
+    <div class="row2">
+      ${fourth?'':`<button class="muted ${draft&&draft.type==='PUNT'?'sel':''}" data-type="PUNT">Punt</button>`}
+      <button class="muted ${draft&&draft.type==='PENALTY'?'sel':''}" data-type="PENALTY">Penalty</button>
+      ${fourth?'':`<button class="muted ${draft&&draft.type==='FG'?'sel':''}" data-type="FG">FG</button>`}
+      <button class="muted" data-type="MORE">More</button>
+      ${fourth?'<button class="muted" data-type="MORE" style="visibility:hidden"></button><button class="muted" data-type="MORE" style="visibility:hidden"></button>':''}
+    </div>
+  </div>`;
+}
+
+/* chip row helper: single-select buttons bound to a draft field */
+function chips(field, options, label) {
+  const btns = options.map(([val, txt]) =>
+    `<button class="chip ${draft[field]===val?'sel':''}" data-chip="${field}:${val}">${txt}</button>`).join("");
+  return `${label?`<label class="grouplabel">${label}</label>`:''}<div class="chiprow">${btns}</div>`;
+}
+function sideYard(sideField, yardField, frameAbbr, c, label) {
+  const opp = E.otherTeam(frameAbbr, c);
+  return `${label?`<label class="grouplabel">${label}</label>`:''}
+    <div class="fields">
+      <div class="field" style="flex:1.4;">
+        <label>side</label>
+        <div class="chiprow" style="margin:0;">
+          <button class="chip ${draft[sideField]==='own'?'sel':''}" data-chip="${sideField}:own">${frameAbbr}</button>
+          <button class="chip ${draft[sideField]==='opp'?'sel':''}" data-chip="${sideField}:opp">${opp}</button>
+        </div>
+      </div>
+      ${fieldBox(yardField, "yard line", true)}
+    </div>`;
+}
+
+function renderPanel(state, c) {
+  if (!draft) return `<div class="panel hidden"></div>`;
+  const parts = panelParts(state, c);
+  if (!parts) return `<div class="panel hidden"></div>`;
+  if (parts.noSave) return `<div class="panel"><h3>${parts.title}</h3>${parts.body}</div>`;
+  return `<div class="panel"><h3>${parts.title}</h3>${parts.body}${saveButton(state,c)}</div>`;
+}
+
+function panelParts(state, c) {
+  const d = draft;
+  const t = d.type;
+
+  if (t === "PASS" && d.complete === null) {
+    return { title: "Pass", noSave: true, body: `
+      <div class="passtoggle">
+        <button data-complete="yes">Complete</button>
+        <button data-complete="no">Incomplete</button>
+      </div>` };
+  }
+
+  let title = "", body = "";
+
+  if (t === "RUN") {
+    title = "Run play";
+    body = twoFields(["runner","Runner #",false], ["yards","Yards",true]) + renderPad();
+  }
+  else if (t === "PASS" && d.complete === false) {
+    title = "Incomplete pass";
+    body = `<div class="fields">${fieldBox("passer","Passer #",false)}</div>` + renderPad();
+  }
+  else if (t === "PASS") {
+    title = "Completed pass";
+    body = `<div class="fields">
+        ${fieldBox("passer","Passer #",false)}
+        ${fieldBox("receiver","Receiver #",false)}
+        ${fieldBox("yards","Yards",true)}
+      </div>` + renderPad();
+  }
+  else if (t === "KICKOFF") {
+    title = d.freeKick ? "Free kick" : "Kickoff";
+    const needsDist = d.result !== "TOUCHBACK" && d.result !== "TOUCHDOWN";
+    const needsRet = d.result === "RETURNED" || d.result === "TOUCHDOWN";
+    body = chips("result", [["RETURNED","Returned"],["TOUCHBACK","Touchback"],["OUT_OF_BOUNDS","Out of bounds"],
+                            ["ONSIDE_RECOVERED","Onside — kept"],["ONSIDE_LOST","Onside — lost"],["TOUCHDOWN","Return TD"]], "Result")
+      + `<div class="fields">
+          ${fieldBox("kickFrom","Kick from",false)}
+          ${needsDist?fieldBox("distance","Distance",true):''}
+          ${needsRet?fieldBox("returnYards","Return yds",false):''}
+        </div>`
+      + `<div class="fields">${fieldBox("kicker","Kicker #",false)}${needsRet?fieldBox("returner","Returner #",false):''}</div>`
+      + renderPad();
+  }
+  else if (t === "PUNT") {
+    title = "Punt";
+    const needsDist = d.result !== "TOUCHBACK" && d.result !== "TOUCHDOWN" && d.result !== "MUFFED";
+    const needsRet = d.result === "RETURNED" || d.result === "TOUCHDOWN";
+    const muffed = d.result === "MUFFED";
+    body = chips("result", [["RETURNED","Returned"],["DOWNED","Downed"],["FAIR_CATCH","Fair catch"],["TOUCHBACK","Touchback"],
+                            ["OUT_OF_BOUNDS","Out of bounds"],["MUFFED","Muffed"],["TOUCHDOWN","Return TD"]], "Result")
+      + (muffed
+          ? chips("recTeam", [[state.possession, state.possession+" (kicking)"],[E.otherTeam(state.possession,c), E.otherTeam(state.possession,c)+" (receiving)"]], "Recovered by")
+            + sideYard("spotSide","spotYard", d.recTeam || E.otherTeam(state.possession,c), c, "Ball ended up at (recovering team's frame)")
+          : `<div class="fields">
+              ${needsDist?fieldBox("distance","Distance",true):''}
+              ${needsRet?fieldBox("returnYards","Return yds",false):''}
+            </div>
+            <div class="fields">${fieldBox("punter","Punter #",false)}${needsRet?fieldBox("returner","Returner #",false):''}</div>`)
+      + renderPad();
+  }
+  else if (t === "FG") {
+    const dist = (100 - state.ballOn) + 10;
+    title = `Field goal — ${dist} yards`;
+    body = chips("result", [["GOOD","Good"],["NO_GOOD","No good"],["BLOCKED","Blocked"]], "Result")
+      + `<div class="fields">${fieldBox("kicker","Kicker #",false)}</div>` + renderPad();
+  }
+  else if (t === "PENALTY") {
+    title = "Penalty";
+    const confirmReady = d.team !== null && d.yards !== null && d.accepted;
+    body = chips("team", [[c.homeTeam.abbr, c.homeTeam.abbr],[c.awayTeam.abbr, c.awayTeam.abbr]], "Penalty on")
+      + `<div class="fields">${fieldBox("yards","Yards",true)}${fieldBox("player","Player #",false)}</div>`
+      + chips("accepted", [[true,"Accepted"],[false,"Declined"]], "")
+      + (d.accepted ? chips("autoFD", [[true,"Auto 1st down"],[false,"No auto 1st"]], "") : "")
+      + (confirmReady ? `<div class="confirmbox">
+            <label class="grouplabel">Confirm the result — matches what the refs marked?</label>
+            ${chips("confirmDown", [[1,"1st"],[2,"2nd"],[3,"3rd"],[4,"4th"]], "")}
+            <div class="fields">${fieldBox("confirmToGo","To go",true)}</div>
+            ${sideYard("confirmSide","confirmYard", state.possession, c, "Ball on")}
+          </div>` : "")
+      + renderPad();
+  }
+  else if (t === "TURNOVER") {
+    title = "Turnover";
+    const newTeam = E.otherTeam(state.possession, c);
+    const needsSpot = d.result !== "TOUCHBACK" && d.result !== "TOUCHDOWN";
+    body = chips("ttype", [["INTERCEPTION","Interception"],["FUMBLE","Fumble lost"]], "Type")
+      + chips("result", [["RECOVERED","Recovered"],["TOUCHDOWN","Return TD"],["TOUCHBACK","Touchback"],["OUT_OF_BOUNDS","Out of bounds"]], "Result")
+      + (needsSpot ? sideYard("spotSide","spotYard", newTeam, c, `Ball ended up at (${newTeam}'s frame)`) : "")
+      + `<div class="fields">
+          ${d.ttype==="INTERCEPTION"?fieldBox("thrownBy","Thrown by #",false):fieldBox("lostBy","Lost by #",false)}
+          ${fieldBox("recoveredBy","Recovered #",false)}
+          ${fieldBox("returnYards","Return yds",false)}
+        </div>` + renderPad();
+  }
+  else if (t === "TRY") {
+    title = "Point after try";
+    let nums = "";
+    if (d.tryType === "KICK") nums = `<div class="fields">${fieldBox("kicker","Kicker #",false)}</div>`;
+    if (d.tryType === "RUN") nums = `<div class="fields">${fieldBox("runner","Runner #",false)}</div>`;
+    if (d.tryType === "PASS") nums = `<div class="fields">${fieldBox("passer","Passer #",false)}${fieldBox("receiver","Receiver #",false)}</div>`;
+    body = chips("tryType", [["KICK","Kick (+1)"],["RUN","Run (+2)"],["PASS","Pass (+2)"]], "Try type")
+      + chips("result", [["GOOD","Good"],["NO_GOOD","No good"],["DEFENSIVE_2PT","Def. 2pt return"]], "Result")
+      + nums + (d.tryType ? renderPad() : "");
+  }
+  else if (t === "KNEEL") {
+    title = "Kneel down";
+    body = `<div class="fields">${fieldBox("player","Player #",false)}</div>` + renderPad();
+  }
+  else if (t === "TIMEOUT") {
+    title = "Timeout";
+    const q = editingId !== null ? (game.plays.find(x => x.id === editingId).computed || {}).quarter : state.quarter;
+    const left = ab => editingId !== null ? "" : ` · ${timeoutsLeft(ab, q)} left`;
+    body = chips("team", [[c.homeTeam.abbr, c.homeTeam.abbr + left(c.homeTeam.abbr)],
+                          [c.awayTeam.abbr, c.awayTeam.abbr + left(c.awayTeam.abbr)]], "Called by")
+      + `<div class="fields">${fieldBox("clock", "Time left (m:ss)", false)}</div>` + renderPad();
+  }
+  else return null;
+
+  if (t !== "TIMEOUT" && (draftIsScoring() || (draft.clock !== null && draft.clock !== undefined))) {
+    const clockRow = `<div class="fields clockrow">${fieldBox("clock", "Time of score (m:ss)", false)}
+      <div class="clockhint">${draft.clock == null ? "Add the scoreboard time" : "Clock on the scoreboard when it scored"}</div></div>`;
+    const at = body.lastIndexOf('<div class="pad">');
+    body = at >= 0 ? body.slice(0, at) + clockRow + body.slice(at) : body + clockRow + renderPad();
+  }
+  return { title, body };
+}
+
+function twoFields(a, b) {
+  return `<div class="fields">${fieldBox(a[0],a[1],a[2])}${fieldBox(b[0],b[1],b[2])}</div>`;
+}
+function fieldBox(key, label, required) {
+  const v = draft[key];
+  const empty = v === null || v === undefined;
+  const signed = SIGNED_FIELDS[key];
+  let shown = empty ? "—" : (signed && v>0 ? "+"+v : ""+v);
+  if (key === "clock" && !empty) shown = `${Math.floor(v / 100)}:${String(v % 100).padStart(2, "0")}`;
+  const bad = key === "clock" && !clockValid(v);
+  return `<div class="field">
+    <label>${label}${required?' <span class="req">•</span>':''}</label>
+    <div class="val ${draft.active===key?'active':''} ${empty?'empty':''} ${bad?'bad':''}" data-focus="${key}">${shown}</div>
+  </div>`;
+}
+function renderPad() {
+  const keys = ["1","2","3","4","5","6","7","8","9","+/-","0","C"];
+  const f = draft.active;
+  const signable = f && SIGNED_FIELDS[f];
+  return `<div class="pad">${keys.map(k => {
+    if (k==="+/-") return `<button class="sign ${signable&&draft[f]<0?'neg':''}" data-key="+/-" ${signable?'':'disabled style="opacity:.3"'}>±</button>`;
+    if (k==="C") return `<button class="clr" data-key="C">clear</button>`;
+    return `<button data-key="${k}">${k}</button>`;
+  }).join("")}</div>`;
+}
+function saveButton(state, c) {
+  const ready = draftReady();
+  let prevTxt = "enter required fields";
+  if (draft && !clockValid(draft.clock)) prevTxt = `check the time — m:ss, up to ${game.config.quarterLength}`;
+  if (ready) {
+    const ns = preview();
+    if (ns.phase === "PLAY") {
+      const ord = ["","1st","2nd","3rd","4th"][ns.down];
+      const tg = ns.goalToGo ? "goal" : E.toGo(ns);
+      prevTxt = `ball to ${E.displayYardLine(ns.ballOn, ns.possession, c)} · ${ord} & ${tg}`;
+    } else if (ns.phase === "TRY") {
+      prevTxt = `touchdown · ${ns.possession} ${ns.score[ns.possession]}`;
+    } else if (ns.phase === "KICKOFF" || ns.phase === "FREE_KICK") {
+      const h = c.homeTeam.abbr, a = c.awayTeam.abbr;
+      prevTxt = `${h} ${ns.score[h]} — ${a} ${ns.score[a]} · ${ns.possession} kicks`;
+    } else {
+      prevTxt = `${ns.possession} ball`;
+    }
+  }
+  return `<button class="save" id="saveBtn" ${ready?'':'disabled'}>
+    <span>Save play</span><span class="preview">${prevTxt}</span></button>`;
+}
+
+function renderLast(c) {
+  const last = game.plays[game.plays.length-1];
+  if (!last) return `<div class="last empty"><span class="txt">No plays yet — enter the opening kickoff above</span></div>`;
+  return `<div class="last"><span class="txt" id="lastTxt" style="cursor:pointer;">Last: <b>${playSummary(last,c)}</b></span>
+    <button class="edit" id="undoBtn">Undo</button>
+    <button class="edit" id="editBtn">Edit</button></div>`;
+}
+function playSummary(p, c) {
+  const base = playSummaryBase(p, c);
+  return p.input && p.input.clock != null ? `${base} · ${quarterLabel(p.computed.quarter)} ${fmtClock(p.input.clock)}` : base;
+}
+function playSummaryBase(p, c) {
+  const cm = p.computed;
+  const inp = p.input;
+  const at = E.displayYardLine(cm.ballOnAfter, cm.possessionAfter, c);
+  const td = cm.events && cm.events.includes("TOUCHDOWN") ? " · TD" : "";
+  switch (p.type) {
+    case "RUN": {
+      const y = inp.yards;
+      return `Run${inp.runner?' #'+inp.runner:''} ${y>=0?'+'+y:y}${td || ' → '+at}`;
+    }
+    case "PASS": {
+      if (!inp.complete) return `Pass${inp.passer?' #'+inp.passer:''} incomplete`;
+      const r = inp.receiver?' → #'+inp.receiver:'';
+      return `Pass${inp.passer?' #'+inp.passer:''}${r} +${inp.yards}${td || ' → '+at}`;
+    }
+    case "KICKOFF": {
+      const lbl = cm.phase === "FREE_KICK" ? "Free kick" : "Kickoff";
+      if (inp.result === "TOUCHBACK") return `${lbl}, touchback → ${at}`;
+      if (inp.result === "ONSIDE_RECOVERED") return `${lbl}, onside kept → ${at}`;
+      if (inp.result === "ONSIDE_LOST") return `${lbl}, onside lost → ${at}`;
+      if (inp.result === "OUT_OF_BOUNDS") return `${lbl} out of bounds → ${at}`;
+      return `${lbl} +${inp.distance||0}, ret ${inp.returnYards||0}${td || ' → '+at}`;
+    }
+    case "PUNT": {
+      if (inp.result === "TOUCHBACK") return `Punt, touchback → ${at}`;
+      if (inp.result === "DOWNED") return `Punt ${inp.distance||0}, downed → ${at}`;
+      if (inp.result === "FAIR_CATCH") return `Punt ${inp.distance||0}, fair catch → ${at}`;
+      if (inp.result === "MUFFED") return `Punt muffed, ${inp.recoveredByTeam} ball → ${at}`;
+      if (inp.result === "OUT_OF_BOUNDS") return `Punt ${inp.distance||0} OOB → ${at}`;
+      return `Punt ${inp.distance||0}, ret ${inp.returnYards||0}${td || ' → '+at}`;
+    }
+    case "FIELD_GOAL": {
+      const dist = (100 - cm.ballOnBefore) + 10;
+      return inp.result === "GOOD" ? `FG ${dist} good` :
+             inp.result === "BLOCKED" ? `FG ${dist} blocked → ${at}` : `FG ${dist} no good → ${at}`;
+    }
+    case "PENALTY":
+      return inp.accepted ? `Penalty ${inp.team} ${inp.yards} → ${at}` : `Penalty ${inp.team} declined`;
+    case "TURNOVER": {
+      const w = inp.turnoverType === "INTERCEPTION" ? "INT" : "Fumble lost";
+      return `${w}${inp.thrownBy?' #'+inp.thrownBy:''}${td || ' → '+at}`;
+    }
+    case "TRY": {
+      const kind = inp.tryType === "KICK" ? "kick" : inp.tryType === "RUN" ? "run" : "pass";
+      const res = inp.result === "GOOD" ? "good" : inp.result === "DEFENSIVE_2PT" ? "def. 2pt!" : "no good";
+      return `Try: ${kind} ${res}`;
+    }
+    case "KNEEL": return `Kneel${inp.player?' #'+inp.player:''}`;
+    case "TIMEOUT": return `Timeout ${inp.team}`;
+    case "QUARTER_END":
+      if (inp.halftimeKicker && cm.quarter === 2) return `Halftime · ${inp.halftimeKicker} kicks off the second half`;
+      return `End of quarter → Q${cm.quarter === 4 ? 'OT' : (typeof cm.quarter === 'number' ? cm.quarter+1 : 'OT')}`;
+    case "SET_SPOT": return `Ball set → ${at}`;
+    default: return p.type;
+  }
+}
+
+/* ---------- Phase 5: stats screens ---------- */
+let statsView = "summary";      // summary | box
+let boxTeam = null;             // abbr shown in the box score
+
+function openStats() { screen = "stats"; statsView = "summary"; draft = null; render(); }
+function closeStats() { screen = "live"; render(); }
+function openBox(abbr) { statsView = "box"; boxTeam = abbr; render(); }
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, ch =>
+    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[ch]);
+}
+const fmtLong = v => v === null || v === undefined ? "—" : String(v);
+const fmtAvg = (y, n) => n ? (y / n).toFixed(1) : "—";
+const who = r => r.player === null ? "No #" : "#" + r.player;
+
+function statsColors() {
+  return { home: readable(teamColor("home"), "#3ddc84"), away: readable(teamColor("away"), "#5b9dff") };
+}
+
+function renderStats() {
+  const S = FootballStats.aggregate(game);
+  if (statsView === "box") { renderBox(S); return; }
+  const c = game.config, H = S.home, A = S.away;
+  const th = S.teams[H], ta = S.teams[A];
+  const col = statsColors();
+
+  /* score header + line score */
+  const qCols = S.overtime ? ["1","2","3","4","OT"] : ["1","2","3","4"];
+  const lineRow = (ab, color) => `<tr><th style="color:${color}">${esc(ab)}</th>${
+    qCols.map((_, i) => `<td>${S.line[ab][i]}</td>`).join("")}<td class="tot">${S.teams[ab].totals.points}</td></tr>`;
+
+  /* team totals, side by side */
+  const a = th.totals, b = ta.totals;
+  const downStr = (cv, at) => at ? `${cv} of ${at}` : "—";
+  const cmpRows = [
+    ["First downs", a.firstDowns, b.firstDowns],
+    ["Total yards", a.totalYds, b.totalYds],
+    ["Rushing", `${a.rushAtt} for ${a.rushYds}`, `${b.rushAtt} for ${b.rushYds}`, "att for yds"],
+    ["Passing", `${a.passComp}–${a.passAtt}–${a.passInt}`, `${b.passComp}–${b.passAtt}–${b.passInt}`, "comp–att–int"],
+    ["Passing yards", a.passYds, b.passYds],
+    ["Yards per play", a.ypp === null ? "—" : a.ypp.toFixed(1), b.ypp === null ? "—" : b.ypp.toFixed(1)],
+    ["Turnovers", a.turnovers, b.turnovers],
+    ["Penalties", `${a.penalties}–${a.penYds}`, `${b.penalties}–${b.penYds}`, "no.–yds"],
+    ["3rd down", downStr(a.thirdConv, a.thirdAtt), downStr(b.thirdConv, b.thirdAtt)],
+    ["4th down", downStr(a.fourthConv, a.fourthAtt), downStr(b.fourthConv, b.fourthAtt)]
+  ].map(([lbl, l, r, hint]) => `<div class="cmp"><span class="l">${l}</span>
+      <span class="m">${lbl}${hint ? `<small>${hint}</small>` : ""}</span><span class="r">${r}</span></div>`).join("");
+
+  /* leaders: numbered players only */
+  const L = FootballStats.leader;
+  const leadCell = (row, kind, color) => {
+    if (!row) return `<div class="ldr-cell empty" style="border-color:${color}">—</div>`;
+    let line;
+    if (kind === "rush") line = `${row.att} car, ${row.yds} yds${row.td ? `, ${row.td} TD` : ""}`;
+    if (kind === "pass") line = `${row.comp}/${row.att}, ${row.yds} yds${row.td ? `, ${row.td} TD` : ""}${row.int ? `, ${row.int} INT` : ""}`;
+    if (kind === "rec")  line = `${row.rec} rec, ${row.yds} yds${row.td ? `, ${row.td} TD` : ""}`;
+    return `<div class="ldr-cell" style="border-color:${color}"><b>#${row.player}</b><span>${line}</span></div>`;
+  };
+  const leaders = [["Rushing","rushing","rush"],["Passing","passing","pass"],["Receiving","receiving","rec"]]
+    .map(([lbl, table, kind]) => `<div class="ldr"><div class="ldr-cat">${lbl}</div><div class="ldr-cells">
+        ${leadCell(L(th, table), kind, col.home)}${leadCell(L(ta, table), kind, col.away)}</div></div>`).join("");
+
+  /* scoring summary */
+  const scoringRows = S.scoring.map(e => {
+    const qn = typeof e.quarter === "number" ? "Q" + e.quarter : "OT";
+    const color = e.team === H ? col.home : col.away;
+    const tm = e.clock != null ? `<span class="tm">${fmtClock(e.clock)}</span>` : `<span class="tm missing">add time</span>`;
+    return `<div class="scr" data-scoreplay="${e.playId}"><span class="q">${qn}<br>${tm}</span>
+      <span class="who" style="color:${color}">${esc(e.team)}</span>
+      <span class="what">${esc(e.text)}</span>
+      <span class="sc">${esc(FootballStats.scoreLine(e.home, e.away, H, A))}</span></div>`;
+  }).join("");
+  const timeoutRows = S.timeouts.map(t => {
+    const color = t.team === H ? col.home : col.away;
+    const tm = t.clock != null ? `<span class="tm">${fmtClock(t.clock)}</span>` : `<span class="tm missing">add time</span>`;
+    return `<div class="scr to" data-scoreplay="${t.playId}"><span class="q">${quarterLabel(t.quarter)}<br>${tm}</span>
+      <span class="who" style="color:${color}">${esc(t.team)}</span><span class="what">Timeout</span><span></span></div>`;
+  }).join("");
+
+  app.innerHTML = `
+    <div class="board">
+      <button class="edit" id="statsBack">← Live</button>
+      <span style="font-size:15px;font-weight:600;">Stats</span>
+      <span class="meta">${game.plays.length} plays</span>
+    </div>
+    <div class="scroll stats">
+      ${S.status === "Final" ? `<div class="panel final-panel"><h3>Final — send the box score</h3>${emailBlock("fin")}</div>` : ""}
+      <div class="st-score">
+        <div class="st-team"><span class="abbr" style="color:${col.home}">${esc(H)}</span><span class="pts">${a.points}</span></div>
+        <div class="st-status">${esc(S.status)}</div>
+        <div class="st-team"><span class="pts">${b.points}</span><span class="abbr" style="color:${col.away}">${esc(A)}</span></div>
+      </div>
+      <table class="linescore"><tr><th></th>${qCols.map(q => `<th>${q}</th>`).join("")}<th class="tot">T</th></tr>
+        ${lineRow(H, col.home)}${lineRow(A, col.away)}</table>
+
+      <div class="panel st-panel"><h3>Team stats</h3>
+        <div class="cmp head"><span class="l" style="color:${col.home}">${esc(H)}</span><span class="m"></span>
+          <span class="r" style="color:${col.away}">${esc(A)}</span></div>
+        ${cmpRows}
+      </div>
+
+      <div class="panel st-panel"><h3>Leaders</h3>${leaders}</div>
+
+      <div class="panel st-panel"><h3>Scoring</h3>
+        ${scoringRows || '<div class="st-empty">No points yet.</div>'}
+      </div>
+
+      <div class="panel st-panel"><h3>Timeouts</h3>
+        ${timeoutRows || '<div class="st-empty">No timeouts yet.</div>'}
+      </div>
+
+      <div class="st-actions">
+        <button id="boxHome">${esc(th.name)} box score</button>
+        <button id="boxAway">${esc(ta.name)} box score</button>
+      </div>
+      <button class="save" id="shareBtn"><span>Share & email</span><span class="preview">PDF, text or backup file</span></button>
+    </div>`;
+  document.getElementById("statsBack").onclick = closeStats;
+  document.getElementById("boxHome").onclick = () => openBox(H);
+  document.getElementById("boxAway").onclick = () => openBox(A);
+  document.getElementById("shareBtn").onclick = () => openShare(S);
+  if (S.status === "Final") wireEmailBlock("fin", S);
+  document.querySelectorAll("[data-scoreplay]").forEach(el =>
+    el.onclick = () => openEdit(Number(el.dataset.scoreplay), "stats", "clock"));
+}
+
+/* full box score for one team; unattributed rows link to the play log */
+function renderBox(S) {
+  const H = S.home, A = S.away;
+  if (boxTeam !== H && boxTeam !== A) boxTeam = H;
+  const t = S.teams[boxTeam], tt = t.totals;
+  const col = statsColors();
+  const myColor = boxTeam === H ? col.home : col.away;
+
+  let anyNoNum = false;
+  function table(title, heads, rows, cells, totalCells) {
+    if (!rows.length) return "";
+    const body = rows.map(r => {
+      const none = r.player === null;
+      if (none) anyNoNum = true;
+      return `<tr class="${none ? "nonum" : ""}" ${none ? 'data-nonum="1"' : ""}><th>${who(r)}</th>${
+        cells(r).map(v => `<td>${v}</td>`).join("")}</tr>`;
+    }).join("");
+    const total = totalCells && rows.length > 1
+      ? `<tr class="total"><th>Team</th>${totalCells.map(v => `<td>${v}</td>`).join("")}</tr>` : "";
+    return `<div class="panel st-panel"><h3>${title}</h3><div class="bxwrap"><table class="bx">
+      <tr><th></th>${heads.map(h => `<td>${h}</td>`).join("")}</tr>${body}${total}</table></div></div>`;
+  }
+  const sum = (rows, k) => rows.reduce((n, r) => n + r[k], 0);
+  const maxL = (rows, k) => rows.reduce((m, r) => r[k] === null ? m : (m === null || r[k] > m ? r[k] : m), null);
+
+  const R = t.rushing, P = t.passing, C = t.receiving;
+  const html =
+    table("Rushing", ["Att","Yds","Avg","TD","Long"], R,
+      r => [r.att, r.yds, fmtAvg(r.yds, r.att), r.td, fmtLong(r.long)],
+      [sum(R,"att"), sum(R,"yds"), fmtAvg(sum(R,"yds"), sum(R,"att")), sum(R,"td"), fmtLong(maxL(R,"long"))]) +
+    table("Passing", ["C/A","Yds","TD","Int","Long"], P,
+      r => [`${r.comp}/${r.att}`, r.yds, r.td, r.int, fmtLong(r.long)],
+      [`${sum(P,"comp")}/${sum(P,"att")}`, sum(P,"yds"), sum(P,"td"), sum(P,"int"), fmtLong(maxL(P,"long"))]) +
+    table("Receiving", ["Rec","Yds","Avg","TD","Long"], C,
+      r => [r.rec, r.yds, fmtAvg(r.yds, r.rec), r.td, fmtLong(r.long)],
+      [sum(C,"rec"), sum(C,"yds"), fmtAvg(sum(C,"yds"), sum(C,"rec")), sum(C,"td"), fmtLong(maxL(C,"long"))]) +
+    table("Kicking", ["FG","Long","PAT","KO","TB"], t.kicking,
+      r => [r.fga ? `${r.fgm}/${r.fga}` : "—", fmtLong(r.fgLong), r.pata ? `${r.patm}/${r.pata}` : "—", r.ko, r.koTB]) +
+    table("Punting", ["No","Yds","Avg","Long"], t.punting,
+      r => [r.no, r.yds, fmtAvg(r.yds, r.no), fmtLong(r.long)]) +
+    table("Kick returns", ["No","Yds","Avg","TD","Long"], t.kickReturns,
+      r => [r.no, r.yds, fmtAvg(r.yds, r.no), r.td, fmtLong(r.long)]) +
+    table("Punt returns", ["No","Yds","Avg","TD","Long"], t.puntReturns,
+      r => [r.no, r.yds, fmtAvg(r.yds, r.no), r.td, fmtLong(r.long)]) +
+    table("Defense", ["Int","Ret yds","Fum rec","TD"], t.defense,
+      r => [r.int, r.intYds, r.fr, r.td]);
+
+  const fdLine = `${tt.firstDowns} first down${tt.firstDowns === 1 ? "" : "s"} (${tt.fdRush} rush, ${tt.fdPass} pass, ${tt.fdPen} penalty)`;
+  const toLine = `${tt.turnovers} turnover${tt.turnovers === 1 ? "" : "s"} (${tt.fumblesLost} fumble${tt.fumblesLost === 1 ? "" : "s"}, ${tt.passInt} INT)`;
+  const twoPt = tt.twoPtAtt ? `<div>2-pt tries: ${tt.twoPtMade} of ${tt.twoPtAtt}</div>` : "";
+
+  app.innerHTML = `
+    <div class="board">
+      <button class="edit" id="boxBack">← Summary</button>
+      <span style="font-size:15px;font-weight:600;">Box score</span>
+      <span class="meta">${esc(S.status)}</span>
+    </div>
+    <div class="colorbars"><div class="cbar" style="background:${myColor}"></div></div>
+    <div class="scroll stats">
+      <div class="chiprow bx-tabs">
+        <button class="chip ${boxTeam === H ? "sel" : ""}" data-boxteam="${esc(H)}">${esc(S.teams[H].name)}</button>
+        <button class="chip ${boxTeam === A ? "sel" : ""}" data-boxteam="${esc(A)}">${esc(S.teams[A].name)}</button>
+      </div>
+      <div class="bx-sum">
+        <div><b>${tt.points}</b> points, <b>${tt.totalYds}</b> total yards on ${tt.plays} plays</div>
+        <div>${fdLine}</div><div>${toLine}</div>
+        <div>${tt.penalties} penalt${tt.penalties === 1 ? "y" : "ies"} for ${tt.penYds} yards</div>${twoPt}
+      </div>
+      ${html || '<div class="st-empty">No plays for this team yet.</div>'}
+      ${anyNoNum ? '<div class="st-note">“No #” rows are plays entered without a jersey number. Tap one to open the play log and add numbers.</div>' : ""}
+    </div>`;
+  document.getElementById("boxBack").onclick = () => { statsView = "summary"; render(); };
+  document.querySelectorAll("[data-boxteam]").forEach(b => b.onclick = () => openBox(b.dataset.boxteam));
+  document.querySelectorAll("[data-nonum]").forEach(r => r.onclick = () => openLog("stats"));
+}
+
+/* ---------- printable box score (PDF) ----------
+   A tiny PDF writer: standard Helvetica/Courier fonts that every PDF viewer
+   and printer has, so nothing is downloaded and it works with no signal.
+   Tables are set in Courier so columns line up on paper. */
+const PDF_WINANSI = { "–":"\\226", "—":"\\227", "·":"\\267", "’":"\\222", "‘":"\\221", "“":"\\223", "”":"\\224", "•":"\\225" };
+function pdfStr(t) {
+  let out = "";
+  for (const ch of String(t)) {
+    if (ch === "\\" || ch === "(" || ch === ")") out += "\\" + ch;
+    else if (PDF_WINANSI[ch]) out += PDF_WINANSI[ch];
+    else if (ch.charCodeAt(0) < 32 || ch.charCodeAt(0) > 126) out += "?";
+    else out += ch;
+  }
+  return out;
+}
+function pdfDocument(pages) {           // pages: arrays of PDF content-stream strings
+  const objs = [];
+  const add = body => { objs.push(body); return objs.length; };
+  const catalog = add(null), pagesObj = add(null);
+  const font = name => add(`<< /Type /Font /Subtype /Type1 /BaseFont /${name} /Encoding /WinAnsiEncoding >>`);
+  const F = { F1: font("Helvetica"), F2: font("Helvetica-Bold"), F3: font("Courier"), F4: font("Courier-Bold") };
+  const fontRes = `<< ${Object.entries(F).map(([k, v]) => `/${k} ${v} 0 R`).join(" ")} >>`;
+  const kids = pages.map(ops => {
+    const stream = ops.join("\n");
+    const content = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    return add(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 612 792] /Resources << /Font ${fontRes} >> /Contents ${content} 0 R >>`);
+  });
+  objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`;
+  objs[pagesObj - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + " 0 R").join(" ")}] /Count ${kids.length} >>`;
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  objs.forEach((body, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${body}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` +
+    offsets.map(o => String(o).padStart(10, "0") + " 00000 n \n").join("") +
+    `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
+function buildBoxScorePdf() {
+  const S = FootballStats.aggregate(game), c = game.config, H = S.home, A = S.away;
+  const th = S.teams[H], ta = S.teams[A];
+  const clk = FootballStats.clockStr;
+  const pages = [];
+  let ops = [], y = 0;
+  const L = 50, W = 512, BOTTOM = 56;
+  function newPage() {
+    ops = []; pages.push(ops); y = 742;
+    ops.push(`BT /F1 8 Tf 0.45 g ${L} 30 Td (${pdfStr(`${th.name} vs ${ta.name}  \u00b7  ${FootballStats.gameDate(game)}  \u00b7  page ${pages.length}`)}) Tj ET`);
+  }
+  const need = h => { if (y - h < BOTTOM) newPage(); };
+  const text = (str, f, size, x, gray) =>
+    ops.push(`BT /${f} ${size} Tf ${gray || 0} g ${x} ${y} Td (${pdfStr(str)}) Tj ET`);
+  const rule = () => ops.push(`0.75 G 0.6 w ${L} ${y + 4} m ${L + W} ${y + 4} l S`);
+  function heading(str) { need(34); y -= 12; text(str, "F2", 12, L); y -= 9; rule(); y -= 10; }
+  const MONO = 9.5, MAXC = Math.floor(W / (MONO * 0.6));
+  function mono(str, bold) {
+    // wrap long lines on spaces, indenting continuations
+    let rest = str;
+    while (rest.length) {
+      let cut = rest.length <= MAXC ? rest.length : rest.lastIndexOf(" ", MAXC);
+      if (cut <= 10) cut = Math.min(MAXC, rest.length);
+      need(13); text(rest.slice(0, cut), bold ? "F4" : "F3", MONO, L); y -= 12.5;
+      rest = rest.slice(cut).trimStart(); if (rest) rest = "      " + rest;
+    }
+  }
+  const padR = (v, n) => String(v).padEnd(n).slice(0, n);
+  const padL = (v, n) => String(v).padStart(n);
+  function table(title, heads, rows, cells, total) {
+    if (!rows.length) return;
+    need(16 + 13 * Math.min(rows.length + 1, 4));
+    y -= 4; text(title, "F2", 10, L); y -= 13;
+    const line = (who, vals, bold) => mono(padR(who, 10) + vals.map(v => padL(v, 8)).join(""), bold);
+    line("", heads, true);
+    rows.forEach(r => line(r.player === null ? "No #" : "#" + r.player, cells(r)));
+    if (total && rows.length > 1) line("Team", total, true);
+    y -= 4;
+  }
+  const avg = (a, b) => b ? (a / b).toFixed(1) : "-";
+  const lng = v => v === null || v === undefined ? "-" : v;
+  const sum = (rows, k) => rows.reduce((n, r) => n + r[k], 0);
+  const maxL = (rows, k) => rows.reduce((m, r) => r[k] === null ? m : (m === null || r[k] > m ? r[k] : m), null);
+
+  newPage();
+  // title block
+  text(`${th.name} ${th.totals.points}, ${ta.name} ${ta.totals.points}`, "F2", 20, L); y -= 18;
+  text(`${S.status}  \u00b7  ${FootballStats.gameDate(game)}  \u00b7  ${c.quarterLength} quarters`, "F1", 10.5, L, 0.35); y -= 10;
+
+  heading("Score by quarter");
+  const qCols = S.overtime ? ["1","2","3","4","OT"] : ["1","2","3","4"];
+  mono(padR("", 18) + qCols.map(q => padL(q, 6)).join("") + padL("T", 8), true);
+  for (const ab of [H, A]) {
+    const t = S.teams[ab];
+    mono(padR(t.name, 18) + qCols.map((_, i) => padL(S.line[ab][i], 6)).join("") + padL(t.totals.points, 8), false);
+  }
+
+  heading("Scoring");
+  if (!S.scoring.length) mono("No scoring.");
+  S.scoring.forEach(e => mono(`${padR(quarterLabel(e.quarter) + " " + (e.clock != null ? clk(e.clock) : "--:--"), 9)} ${padR(e.team, 5)}${e.text}  (${FootballStats.scoreLine(e.home, e.away, H, A)})`));
+
+  heading("Timeouts");
+  if (!S.timeouts.length) mono("None recorded.");
+  for (const ab of [H, A]) {
+    const list = S.timeouts.filter(t => t.team === ab).map(t => `${quarterLabel(t.quarter)} ${t.clock != null ? clk(t.clock) : "--:--"}`);
+    if (list.length) mono(`${padR(ab, 5)}${list.join(",  ")}`);
+  }
+
+  heading("Team statistics");
+  const a = th.totals, b = ta.totals;
+  const dn = (cv, at) => at ? `${cv}-${at}` : "-";
+  const cmp = [
+    ["First downs", a.firstDowns, b.firstDowns],
+    ["  Rush-pass-penalty", `${a.fdRush}-${a.fdPass}-${a.fdPen}`, `${b.fdRush}-${b.fdPass}-${b.fdPen}`],
+    ["Total yards", a.totalYds, b.totalYds],
+    ["Total plays", a.plays, b.plays],
+    ["Yards per play", a.ypp === null ? "-" : a.ypp.toFixed(1), b.ypp === null ? "-" : b.ypp.toFixed(1)],
+    ["Rushes / yards", `${a.rushAtt} / ${a.rushYds}`, `${b.rushAtt} / ${b.rushYds}`],
+    ["Comp-att-int", `${a.passComp}-${a.passAtt}-${a.passInt}`, `${b.passComp}-${b.passAtt}-${b.passInt}`],
+    ["Passing yards", a.passYds, b.passYds],
+    ["Fumbles lost", a.fumblesLost, b.fumblesLost],
+    ["Turnovers", a.turnovers, b.turnovers],
+    ["Penalties-yards", `${a.penalties}-${a.penYds}`, `${b.penalties}-${b.penYds}`],
+    ["3rd down", dn(a.thirdConv, a.thirdAtt), dn(b.thirdConv, b.thirdAtt)],
+    ["4th down", dn(a.fourthConv, a.fourthAtt), dn(b.fourthConv, b.fourthAtt)],
+    ["2-pt conversions", dn(a.twoPtMade, a.twoPtAtt), dn(b.twoPtMade, b.twoPtAtt)]
+  ];
+  mono(padR("", 22) + padL(H, 14) + padL(A, 14), true);
+  cmp.forEach(([l, x, z]) => mono(padR(l, 22) + padL(x, 14) + padL(z, 14)));
+
+  for (const ab of [H, A]) {
+    const t = S.teams[ab], R = t.rushing, P = t.passing, C = t.receiving;
+    heading(`${t.name} individual statistics`);
+    const before = pages.length * 10000 + ops.length;
+    table("Rushing", ["Att","Yds","Avg","TD","Long"], R, r => [r.att, r.yds, avg(r.yds, r.att), r.td, lng(r.long)],
+      [sum(R,"att"), sum(R,"yds"), avg(sum(R,"yds"), sum(R,"att")), sum(R,"td"), lng(maxL(R,"long"))]);
+    table("Passing", ["C-A","Yds","TD","Int","Long"], P, r => [`${r.comp}-${r.att}`, r.yds, r.td, r.int, lng(r.long)],
+      [`${sum(P,"comp")}-${sum(P,"att")}`, sum(P,"yds"), sum(P,"td"), sum(P,"int"), lng(maxL(P,"long"))]);
+    table("Receiving", ["Rec","Yds","Avg","TD","Long"], C, r => [r.rec, r.yds, avg(r.yds, r.rec), r.td, lng(r.long)],
+      [sum(C,"rec"), sum(C,"yds"), avg(sum(C,"yds"), sum(C,"rec")), sum(C,"td"), lng(maxL(C,"long"))]);
+    table("Kicking", ["FG","Long","PAT","KO","TB"], t.kicking,
+      r => [r.fga ? `${r.fgm}-${r.fga}` : "-", lng(r.fgLong), r.pata ? `${r.patm}-${r.pata}` : "-", r.ko, r.koTB]);
+    table("Punting", ["No","Yds","Avg","Long"], t.punting, r => [r.no, r.yds, avg(r.yds, r.no), lng(r.long)]);
+    table("Kick returns", ["No","Yds","Avg","TD","Long"], t.kickReturns, r => [r.no, r.yds, avg(r.yds, r.no), r.td, lng(r.long)]);
+    table("Punt returns", ["No","Yds","Avg","TD","Long"], t.puntReturns, r => [r.no, r.yds, avg(r.yds, r.no), r.td, lng(r.long)]);
+    table("Defense", ["Int","IntYds","FumRec","TD"], t.defense, r => [r.int, r.intYds, r.fr, r.td]);
+    if (pages.length * 10000 + ops.length === before) mono("No individual statistics recorded.");
+  }
+  const hasNoNum = [H, A].some(ab => ["rushing","passing","receiving","kicking","punting","kickReturns","puntReturns","defense"]
+    .some(k => S.teams[ab][k].some(r => r.player === null)));
+  if (hasNoNum) { y -= 6; need(14); text("\u201cNo #\u201d = plays recorded without a jersey number.", "F1", 8.5, L, 0.45); }
+  return pdfDocument(pages);
+}
+function boxScoreFilename(ext) {
+  const c = game.config;
+  const slug = v => String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const d = new Date((game.plays[0] && game.plays[0].timestamp) || Date.now());
+  const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${slug(c.homeTeam.name)}-vs-${slug(c.awayTeam.name)}-${ymd}-box-score.${ext}`;
+}
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/* ---------- email ----------
+   A web page can't send mail by itself, so the phone's Mail app does it:
+   - PDF: the phone's share sheet, with the PDF already attached; pick Mail.
+   - Text: opens Mail with the saved address, subject and box score filled in. */
+const EMAIL_KEY = "riverview_email";
+const savedEmail = () => { try { return localStorage.getItem(EMAIL_KEY) || ""; } catch (e) { return ""; } };
+function rememberEmail(v) { try { localStorage.setItem(EMAIL_KEY, v.trim()); } catch (e) {} }
+function emailSubject(S) {
+  const th = S.teams[S.home], ta = S.teams[S.away];
+  return `${th.name} ${th.totals.points}, ${ta.name} ${ta.totals.points} (${S.status}) — box score`;
+}
+async function emailPdf(S, statusEl) {
+  const blob = buildBoxScorePdf();
+  const name = boxScoreFilename("pdf");
+  const file = new File([blob], name, { type: "application/pdf" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: emailSubject(S) });
+      if (statusEl) statusEl.textContent = "Sent to the share sheet.";
+    } catch (e) {
+      if (e && e.name !== "AbortError" && statusEl) statusEl.textContent = "Couldn't open the share sheet. Use Download PDF instead.";
+    }
+    return;
+  }
+  // no file sharing (most desktops): save the PDF, then open a mail draft to attach it to
+  downloadBlob(blob, name);
+  const to = savedEmail();
+  const body = `The printable box score was saved to your Downloads as ${name}. Attach it to this email.\n\n` +
+               FootballStats.toText(S, game);
+  openMailto(`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(emailSubject(S))}&body=${encodeURIComponent(body)}`);
+  if (statusEl) statusEl.textContent = "PDF downloaded — attach it to the email draft.";
+}
+function openMailto(url) { window.location.href = url; }
+function emailText(S) {
+  const to = savedEmail();
+  openMailto(`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(emailSubject(S))}&body=${encodeURIComponent(FootballStats.toText(S, game))}`);
+}
+
+/* ---------- share / backup ---------- */
+function backupFilename() {
+  const c = game.config;
+  const d = new Date();
+  const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const slug = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `${slug(c.homeTeam.name)}-vs-${slug(c.awayTeam.name)}-${c.date || ymd}.json`;
+}
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext)
+    return navigator.clipboard.writeText(text).then(() => true, () => fallbackCopy(text));
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove();
+  return ok;
+}
+function emailBlock(idp) {
+  return `<label class="grouplabel" for="${idp}Email">Email to</label>
+    <input class="emailin" id="${idp}Email" type="email" inputmode="email" autocomplete="email"
+           placeholder="you@example.com" value="${esc(savedEmail())}">
+    <button class="sel" id="${idp}Pdf" style="text-align:center;">Email printable PDF</button>
+    <button id="${idp}Txt" style="text-align:center;">Email as text</button>
+    <div class="emailnote" id="${idp}Note">PDF opens your share sheet with the box score attached. Pick Mail and enter the address.
+      Text opens Mail already addressed to the email above.</div>`;
+}
+function wireEmailBlock(idp, S) {
+  const inp = document.getElementById(idp + "Email");
+  const note = document.getElementById(idp + "Note");
+  inp.onchange = inp.onblur = () => rememberEmail(inp.value);
+  document.getElementById(idp + "Pdf").onclick = () => { rememberEmail(inp.value); emailPdf(S, note); };
+  document.getElementById(idp + "Txt").onclick = () => {
+    rememberEmail(inp.value);
+    if (!inp.value.trim()) { note.textContent = "Enter an email address first."; inp.focus(); return; }
+    emailText(S);
+  };
+}
+function openShare(S) {
+  const text = FootballStats.toText(S, game);
+  openSheet(`
+    <h3>Share & email</h3>
+    ${emailBlock("sh")}
+    <label class="grouplabel">More</label>
+    <div class="sharegrid">
+      <button id="exPdf">Download PDF</button>
+      <button id="exCopy">Copy text</button>
+    </div>
+    <button id="exJson">Download backup file</button>
+    <details class="exportwrap"><summary>Preview text</summary><pre class="exporttext" id="exText">${esc(text)}</pre></details>
+    <button class="cancel" id="exClose">Close</button>
+  `);
+  wireEmailBlock("sh", S);
+  document.getElementById("exPdf").onclick = () => downloadBlob(buildBoxScorePdf(), boxScoreFilename("pdf"));
+  const cp = document.getElementById("exCopy");
+  cp.onclick = () => copyText(text).then(ok => { cp.textContent = ok ? "Copied" : "Copy failed"; });
+  document.getElementById("exJson").onclick = downloadBackup;
+  document.getElementById("exClose").onclick = closeSheet;
+}
+function downloadBackup() {
+  const blob = new Blob([JSON.stringify(slimGame(game), null, 1)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = backupFilename();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let g;
+    try {
+      g = JSON.parse(reader.result);
+      if (!g || !g.config || !g.config.homeTeam || !g.config.awayTeam || !Array.isArray(g.plays))
+        throw new Error("not a game file");
+      g.plays.forEach(p => { p.editHistory = p.editHistory || []; });
+      g.nextId = g.nextId || (g.plays.reduce((m, p) => Math.max(m, p.id || 0), 0) + 1);
+      E.reduceGame(g);
+    } catch (e) {
+      alert("That file isn't a game backup from this app. Choose a .json file saved with Download backup file.");
+      return;
+    }
+    if (localStorage.getItem(STORE_KEY) &&
+        !confirm(`Load ${g.config.homeTeam.name} vs ${g.config.awayTeam.name} (${g.plays.length} plays)?\n\nThis replaces the game saved on this device.`)) return;
+    game = g; draft = null; screen = "live";
+    save(); render();
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- setup screen ---------- */
+let setupKick = null;
+function renderSetup() {
+  const saved = localStorage.getItem(STORE_KEY);
+  app.innerHTML = `
+    <div class="setup">
+      <h1>New game</h1>
+      <p>Two teams, who kicks off, and you're live. Abbreviations fill in from the names.</p>
+      <label>Home team</label>
+      <input id="home" placeholder="Home" autocomplete="off">
+      <label>Home color</label>
+      ${colorPicker("home", null)}
+      <label>Away team</label>
+      <input id="away" placeholder="Away" autocomplete="off">
+      <label>Away color</label>
+      ${colorPicker("away", null)}
+      <label>Quarter length</label>
+      <select id="qlen"><option>12:00</option><option>15:00</option></select>
+      <label>Opening kickoff by</label>
+      <div class="kick">
+        <button data-kick="home" class="muted">Home</button>
+        <button data-kick="away" class="muted">Away</button>
+      </div>
+      <button class="start" id="startBtn">Start game</button>
+      ${saved ? `<button class="resume" id="resumeBtn">Resume saved game</button>` : ''}
+      <button class="resume" id="restoreBtn">Load a backup file</button>
+      <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+    </div>`;
+  setupKick = null;
+  document.querySelectorAll("[data-kick]").forEach(b =>
+    b.onclick = () => { setupKick = b.dataset.kick;
+      document.querySelectorAll("[data-kick]").forEach(x=>x.classList.remove("sel"));
+      b.classList.add("sel"); });
+
+  wireColorPickers();
+
+  document.getElementById("startBtn").onclick = () => {
+    const home = (document.getElementById("home").value || "Home").trim();
+    const away = (document.getElementById("away").value || "Away").trim();
+    const homeAbbr = E.autoAbbr(home), awayAbbr = E.autoAbbr(away);
+    const who = setupKick === "away" ? awayAbbr : homeAbbr;
+    const homeColor = colorPick.home, awayColor = colorPick.away;
+    startGame({ homeName: home, awayName: away,
+      quarterLength: document.getElementById("qlen").value, whoKicksOff: who,
+      homeColor, awayColor });
+  };
+  const rb = document.getElementById("resumeBtn");
+  if (rb) rb.onclick = () => { game = load(); if (game) render(); };
+  const rf = document.getElementById("restoreFile");
+  document.getElementById("restoreBtn").onclick = () => rf.click();
+  rf.onchange = () => { if (rf.files[0]) restoreBackup(rf.files[0]); rf.value = ""; };
+}
+
+/* ---------- event wiring ---------- */
+function wireDraftControls() {
+  document.querySelectorAll("[data-complete]").forEach(b =>
+    b.onclick = () => setComplete(b.dataset.complete === "yes"));
+  document.querySelectorAll("[data-focus]").forEach(b => b.onclick = () => focusField(b.dataset.focus));
+  document.querySelectorAll("[data-key]").forEach(b => b.onclick = () => padPress(b.dataset.key));
+  document.querySelectorAll("[data-chip]").forEach(b => b.onclick = () => {
+    const i = b.dataset.chip.indexOf(":");
+    const field = b.dataset.chip.slice(0, i);
+    let value = b.dataset.chip.slice(i + 1);
+    if (value === "true") value = true;
+    else if (value === "false") value = false;
+    else if (/^\d+$/.test(value) && (field === "confirmDown")) value = Number(value);
+    setChip(field, value);
+  });
+}
+function wire() {
+  document.querySelectorAll("[data-type]").forEach(b => b.onclick = () => pickType(b.dataset.type));
+  wireDraftControls();
+  const sb = document.getElementById("saveBtn"); if (sb) sb.onclick = commit;
+  const eb = document.getElementById("editBtn"); if (eb) eb.onclick = editLast;
+  const lt = document.getElementById("lastTxt"); if (lt) lt.onclick = () => openLog("live");
+  const ub = document.getElementById("undoBtn"); if (ub) ub.onclick = undoLast;
+  const mb = document.getElementById("menuBtn"); if (mb) mb.onclick = openMenu;
+  const ss = document.getElementById("setSpotBtn"); if (ss) ss.onclick = openSetSpot;
+}
+
+/* ---------- boot ---------- */
+game = load();
+render();
+</script>
+</body>
+</html>
