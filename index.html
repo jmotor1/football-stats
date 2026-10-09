@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#16201b">
-<title>Stat Sheet — live entry</title>
+<title>Football Stats</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root {
     --bg: #16201b;          /* dark slate-green, legible in a dark stand */
@@ -279,6 +282,10 @@
                  font-size: 14px; padding: 10px 10px; }
   .confirmdone { display: block; margin: 4px 0 6px auto; }
   .penyds .chip { flex: 1; font-size: 17px; font-weight: 700; }
+  .updbanner { position: fixed; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 50;
+               height: 48px; border-radius: 12px; border: none; background: var(--turf); color: #06241a;
+               font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+  .appinfo { text-align: center; font-size: 11px; color: var(--dim); padding: 6px 0 2px; }
   .hidden { display: none; }
 </style>
 </head>
@@ -1816,7 +1823,9 @@ function openMenu() {
     ${FootballStats.isFinal(game) ? "" : `<button id="mQtr">${endQuarterLabel(E.getState(game).quarter)}</button>`}
     <button id="mSpot">Set ball spot (start a drive)</button>
     <button class="danger" id="mNew">New game (clear this one)</button>
+    ${installPrompt ? '<button id="mInstall">Install app on this device</button>' : ""}
     <button class="cancel" id="mCancel">Cancel</button>
+    ${appInfoLine()}
   `);
   document.getElementById("mStats").onclick = () => { closeSheet(); openStats(); };
   document.getElementById("mLog").onclick = () => { closeSheet(); openLog("live"); };
@@ -1825,6 +1834,8 @@ function openMenu() {
   const mq = document.getElementById("mQtr"); if (mq) mq.onclick = endQuarterFlow;
   document.getElementById("mNew").onclick = resetGame;
   document.getElementById("mCancel").onclick = closeSheet;
+  const mi = document.getElementById("mInstall");
+  if (mi) mi.onclick = async () => { closeSheet(); installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; };
 }
 function openEditTeams() {
   const c = game.config;
@@ -2942,6 +2953,40 @@ function restoreBackup(file) {
     save(); render();
   };
   reader.readAsText(file);
+}
+
+/* ---------- offline install & updates ---------- */
+const APP_VERSION = "2026.10.09";
+let installPrompt = null;
+let offlineReady = false;
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register("sw.js").then(() => {
+    offlineReady = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.ready.then(() => { offlineReady = true; });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener("message", e => {
+    if (e.data && e.data.type === "app-updated") showUpdateBanner();
+  });
+  // the update check can finish while this page is still loading; look for its timestamp
+  const checkUpdated = () => caches.open("football-stats")
+    .then(c => c.match(new URL("__updated__", location.href).href))
+    .then(r => r && r.text())
+    .then(t => { if (t && Number(t) >= performance.timeOrigin) showUpdateBanner(); })
+    .catch(() => {});
+  [2000, 8000].forEach(ms => setTimeout(checkUpdated, ms));
+}
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; });
+window.addEventListener("appinstalled", () => { installPrompt = null; });
+function showUpdateBanner() {
+  if (document.getElementById("updBanner")) return;
+  const b = document.createElement("button");
+  b.id = "updBanner"; b.className = "updbanner";
+  b.textContent = "Update ready — tap to load it";
+  b.onclick = () => { save(); location.reload(); };
+  document.body.appendChild(b);
+}
+function appInfoLine() {
+  return `<div class="appinfo">Version ${APP_VERSION} · ${offlineReady ? "saved for offline use ✓" : "not saved for offline yet"}</div>`;
 }
 
 /* ---------- setup screen ---------- */
